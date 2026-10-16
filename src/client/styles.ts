@@ -232,6 +232,64 @@ const CSS = `
 }
 .pi-footRepo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pi-footMeta { margin-left: auto; flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ── 详情视图（点开一行）：同一套尺度，标题仍在 36px 头带里 ─────────────── */
+.pi-detail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.pi-detailTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--dsw-font-xxs-strong-12);
+  color: var(--dsw-alias-label-primary);
+}
+.pi-detailBody { flex: 1; min-height: 0; overflow: auto; padding: 8px 12px 12px; }
+.pi-detailMeta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.pi-detailStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.pi-add { color: var(--dsw-alias-state-success-primary); }
+.pi-del { color: var(--dsw-alias-state-error-primary); }
+.pi-sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin: 6px 0 2px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  font: var(--dsw-font-xxs-strong-12);
+  color: var(--dsw-alias-label-secondary);
+}
+/* 正文与评论：这一版是**纯文本 + 保留换行**（不猜 markdown），等界面定稿再决定要不要上渲染器 */
+.pi-prose { white-space: pre-wrap; word-break: break-word; font: var(--dsw-font-xxs-12); color: var(--dsw-alias-label-primary); }
+.pi-comment { padding: 8px 0; border-top: 1px solid var(--dsw-alias-border-l1); }
+.pi-commentHead { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.pi-file { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 2px; border-radius: 3px; }
+.pi-file:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.pi-filePath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--dsw-font-xxxs-11);
+  font-family: var(--ds-font-family-code, ui-monospace, monospace);
+  color: var(--dsw-alias-label-primary);
+}
+.pi-fileOld { color: var(--dsw-alias-label-tertiary); text-decoration: line-through; }
+.pi-fileCounts {
+  flex: none;
+  font: var(--dsw-font-xxxs-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
 `
 
 /** 注入一次；已存在就直接返回（HMR 重复 apply 不会叠第二份）。 */

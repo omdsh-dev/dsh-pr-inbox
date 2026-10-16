@@ -149,6 +149,25 @@ await page.waitForTimeout(300)
 if (await page.locator('[data-pr-row]').count() === 0) fail('清空搜索后行没有复原')
 step('搜索过滤 + 清空复原生效')
 
+// 详情：点开一行 → 面板自己渲染（正文 + 文件清单），返回回到列表原位。
+await page.locator('[data-pr-row="969"]').click()
+await page.locator('[data-dsh-pr-inbox-detail="969"]').waitFor({ timeout: 60_000 })
+let detailFiles = 0
+for (let attempt = 0; attempt < 120; attempt++) {
+  detailFiles = await page.locator('[data-pi-file]').count()
+  if (detailFiles > 0) break
+  await page.waitForTimeout(500)
+}
+const bodyLength = ((await page.locator('[data-pi-body]').first().innerText()) ?? '').length
+const commentCount = await page.locator('[data-pi-comment]').count()
+console.log(`· 详情 #969：正文 ${bodyLength} 字符、文件行 ${detailFiles}、时间线 ${commentCount}`)
+if (detailFiles === 0) fail('详情没有渲染出文件清单')
+if (bodyLength === 0) fail('详情没有渲染出正文')
+await shoot('pr-inbox-detail')
+await page.locator('[data-dsh-pr-inbox-detail] button.pi-iconButton').first().click()
+await page.locator('[data-bucket="authored"]').waitFor({ timeout: 15_000 })
+step('详情打开 + 返回列表生效')
+
 if (pageErrors.length > 0) fail(`页面报错：${pageErrors.join(' | ')}`)
 console.log(`✅ PR 面板已在真实实例里渲染并绑定项目：${expectRepo ?? text.slice(0, 80)}`)
 await browser.close()

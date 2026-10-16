@@ -39,12 +39,17 @@ src/host/gh.ts        gh 子进程边界（超时/输出上限/错误码分类/�
 src/host/repo.ts      工作区 → owner/repo（parseRemoteUrl 纯函数）
 src/host/routes.ts    HTTP 信封（POST + { op } → { ok, value }）
 src/client/index.tsx  向 better-sidebar 注册 tab
-src/client/Panel.tsx  面板（阶段一：绑定与自检）
+src/client/Panel.tsx  面板（阶段二：三桶列表 / 搜索 / 简洁·详细）
+src/client/Detail.tsx 详情视图（阶段三：正文 / 时间线 / 文件清单，插件自渲染）
 src/shared/types.ts   两端共享的类型
 ```
 
 ## 状态
 
-- 阶段一（本版）：工作区绑定 + `gh` 环境自检 + host↔client 通路。
-- 阶段二：三桶列表（我提的 / 待我审 / 最近合并）+ 顶部搜索 + 简洁/详细切换。
-- 阶段三：PR 详情（正文 / 评论 / 文件，插件自渲染）。
+- 阶段一：工作区绑定 + `gh` 环境自检 + host↔client 通路。
+- 阶段二：三桶列表（我提的 / 待我审 / 最近合并）+ 顶部搜索 + 简洁/详细切换，规格对齐
+  better-sidebar 的原生尺度（36px 头带 / 28px 行与控件 / 2-3-4px 圆角 / 悬停与选中态）。
+- 阶段三：点开一行 → **插件自渲染**的 PR 详情（正文、评论与评审时间线、改动文件清单；
+  正文与时间线有界并如实标注截断，支线失败进 `warnings` 而不是空白）。
+
+写操作（评论 / approve / merge）不在只读 v1 的范围内。

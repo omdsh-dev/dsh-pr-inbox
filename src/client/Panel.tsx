@@ -14,8 +14,9 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
-import type { BucketKey, BucketValue, ListValue, PrRow } from '../shared/types'
+import type { BucketKey, BucketValue, ListValue, PrDetailValue, PrRow } from '../shared/types'
 import { RouteError, callOp, resolveCwd } from './api'
+import { Detail } from './Detail'
 import { formatAge, matchesQuery } from './format'
 import { ChevronIcon, ExternalIcon, RefreshIcon } from './icons'
 import { L } from './labels'
@@ -161,14 +162,27 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
   const [density, setDensity] = useState<Density>('compact')
   const [collapsed, setCollapsed] = useState<Partial<Record<BucketKey, boolean>>>({})
   const [selected, setSelected] = useState<number | undefined>(undefined)
+  /** 打开的详情（undefined = 还在列表）。 */
+  const [open, setOpen] = useState<number | undefined>(undefined)
+  const [detail, setDetail] = useState<{ loading: boolean; value?: PrDetailValue; error?: string }>({ loading: false })
   const generation = useRef(0)
+  const detailGeneration = useRef(0)
+  /** 会话权威 cwd：拿到一次就复用（列表与详情共用）。 */
+  const cwdRef = useRef<string | undefined>(undefined)
+
+  const ensureCwd = useCallback(async (): Promise<string | undefined> => {
+    if (cwdRef.current !== undefined) return cwdRef.current
+    const resolved = await resolveCwd(ctx, sessionId, cwd)
+    cwdRef.current = resolved
+    return resolved
+  }, [ctx, sessionId, cwd])
 
   const load = useCallback(async (): Promise<void> => {
     const mine = generation.current + 1
     generation.current = mine
     setState({ phase: 'loading' })
     try {
-      const resolved = await resolveCwd(ctx, sessionId, cwd)
+      const resolved = await ensureCwd()
       if (resolved === undefined) {
         if (mine === generation.current) setState({ phase: 'failed', message: '会话还没有工作目录', code: 'no-cwd' })
         return
@@ -181,7 +195,31 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
       const code = error instanceof RouteError ? error.code : undefined
       setState({ phase: 'failed', message, ...(code === undefined ? {} : { code }) })
     }
-  }, [ctx, sessionId, cwd])
+  }, [ctx, ensureCwd])
+
+  /** 打开一个 PR 的详情（host 侧 30 s 有界缓存，重复点开不打 API）。 */
+  const loadDetail = useCallback(async (number: number): Promise<void> => {
+    const mine = detailGeneration.current + 1
+    detailGeneration.current = mine
+    setDetail({ loading: true })
+    try {
+      const resolved = await ensureCwd()
+      if (resolved === undefined) {
+        if (mine === detailGeneration.current) setDetail({ loading: false, error: '会话还没有工作目录' })
+        return
+      }
+      const value = await callOp<PrDetailValue>(ctx, 'detail', { cwd: resolved, number })
+      if (mine === detailGeneration.current) setDetail({ loading: false, value })
+    } catch (error) {
+      if (mine !== detailGeneration.current) return
+      setDetail({ loading: false, error: error instanceof Error ? error.message : String(error) })
+    }
+  }, [ctx, ensureCwd])
+
+  const openRow = useCallback((row: PrRow): void => {
+    setSelected(row.number)
+    setOpen(row.number)
+  }, [])
 
   // 可见性门控：隐藏时什么都不做，重新可见立刻补一次（不持定时器）。
   useEffect(() => {
@@ -189,9 +227,33 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
     void load()
   }, [visible, load])
 
+  // 详情同理：打开的 PR 只在可见时取，重新可见补一次（host 侧 30 s 缓存兜住重复）。
+  useEffect(() => {
+    if (!visible || open === undefined) return
+    void loadDetail(open)
+  }, [visible, open, loadDetail])
+
+  const back = useCallback((): void => {
+    detailGeneration.current += 1
+    setOpen(undefined)
+    setDetail({ loading: false })
+  }, [])
+
   const ready = state.phase === 'ready' ? state.value : undefined
   const gh = ready?.gh
   const repo = ready?.repo ?? undefined
+
+  // 详情视图：面板整体换成 PR 内容（列表状态保留，返回即原位）。
+  if (open !== undefined) {
+    return createElement('div', { className: 'pi-root', 'data-dsh-pr-inbox-panel': '', 'data-pi-view': 'detail' },
+      createElement(Detail, {
+        detail: detail.value,
+        loading: detail.loading,
+        error: detail.error,
+        onBack: back,
+        onRefresh: () => { void loadDetail(open) },
+      }))
+  }
 
   const head = createElement('div', { className: 'pi-head' }, [
     createElement('input', {
@@ -237,7 +299,7 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
         key: bucket, bucket, value: value.buckets[bucket], query, density,
         open: collapsed[bucket] !== true,
         onToggle: () => { setCollapsed(previous => ({ ...previous, [bucket]: previous[bucket] !== true })) },
-        selected, onSelect: (row: PrRow) => { setSelected(row.number) },
+        selected, onSelect: openRow,
       }))
     }
   }
