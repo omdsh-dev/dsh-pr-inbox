@@ -9,8 +9,9 @@
  * 稳态开销：只在 `visible` 时取数、不持定时器、重新可见即补刷一次；host 侧还有
  * 60 s 有界缓存，反复切 tab 不会打爆搜索配额。
  *
- * 可寻址面（也给挂载自检用）：`[data-dsh-pr-inbox-panel]` / `[data-pi-search]` /
- * `[data-pi-density]` / `[data-bucket]` / `[data-pr-row="<number>"]` / `[data-pi-foot]`。
+ * 可寻址面（也给挂载自检用）：`[data-dsh-pr-inbox-panel]` / `[data-pi-view]` /
+ * `[data-bucket]` / `[data-pr-row="<number>"]` / `[data-pi-foot]`；顶栏的搜索框、
+ * 密度开关、刷新是官方控件，按 role/aria 名寻址（官方件不接裸 `data-*`）。
  */
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
@@ -27,7 +28,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BucketKey, BucketValue, ListValue, PrDetailValue, PrRow } from '../shared/types'
 import { RouteError, callOp, resolveCwd } from './api'
-import { Age, Author } from './bits'
+import { Age, Author, Avatar } from './bits'
 import { Detail } from './Detail'
 import { avatarUrlOf, formatAge, isFresh, matchesQuery } from './format'
 import type { I18n } from './i18n'
@@ -77,7 +78,7 @@ function rowHandlers(onActivate: () => void) {
 
 function OpenExternal(props: { url: string, label: string }) {
   return createElement(Button, {
-    variant: 'ghost', size: 'sm',
+    variant: 'ghost', size: 'sm', className: 'pi-external',
     icon: createElement(IconLinkOutlineRegular, {}),
     'aria-label': props.label, title: props.label,
     onClick: (event: ReactMouseEvent) => {
@@ -87,61 +88,60 @@ function OpenExternal(props: { url: string, label: string }) {
   })
 }
 
-/** 一行 PR。简洁=单行 28px（扫描用）；详细=两行（标题 + 作者/标签/评论/合并时间）。 */
+/**
+ * 一行 PR 的固定几何（两种密度共用同一条身份行）：
+ *
+ *   ◯  #123  标题…                      [草稿]  2 天前  (↗ 悬停才出现)
+ *      alice  [合并于…] [标签] [3 条评论]          ← 只有「详细」多出这条事实行
+ *
+ * 头像在**行首独立列**（两种密度同 x、同宽、同高，与首行中线对齐），身份行的元素
+ * 顺序与右边界也完全相同：切换密度只是增删第二条事实行，已有信息一律不跳位。
+ * 挂载门用元素坐标钉住这一点（见 scripts/mount-check.mjs 的「行几何」断言）。
+ */
 function Row(props: { row: PrRow, density: Density, selected: boolean, onSelect: (row: PrRow) => void, i18n: I18n }) {
   const { row, density, i18n } = props
   const { t, tf } = i18n
-  const num = createElement('span', { key: 'n', className: 'pi-num' }, `#${row.number}`)
-  const subject = createElement('span', { key: 't', className: 'pi-subject', title: row.title }, row.title)
-  const external = createElement(OpenExternal, { key: 'x', url: row.url, label: t('openOnGitHub') })
-  const handlers = rowHandlers(() => { props.onSelect(row) })
   const avatar = avatarUrlOf(row)
-  if (density === 'compact') {
-    return createElement('div', {
-      ...handlers,
-      className: 'pi-row',
-      'data-density': 'compact',
-      'data-pr-row': String(row.number),
-      'data-selected': props.selected ? 'true' : undefined,
-      title: `${row.author} · ${formatAge(row.updatedAt)}`,
-    }, [
-      num, subject,
-      row.isDraft ? createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')) : null,
-      external,
-      createElement('span', { key: 'm', className: 'pi-meta' }, [
-        createElement(Author, { key: 'a', login: row.author, ...(avatar === undefined ? {} : { avatar }) }),
-        createElement('span', { key: 's' }, '·'),
-        createElement(Age, { key: 't', iso: row.updatedAt }),
-      ]),
-    ])
+  const handlers = rowHandlers(() => { props.onSelect(row) })
+
+  const identity: ReactNode[] = [
+    createElement('span', { key: 'n', className: 'pi-num' }, `#${row.number}`),
+    createElement('span', { key: 't', className: 'pi-subject', title: row.title }, row.title),
+  ]
+  if (row.isDraft) identity.push(createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')))
+  identity.push(createElement('span', { key: 'g', className: 'pi-age' }, createElement(Age, { iso: row.updatedAt })))
+  identity.push(createElement(OpenExternal, { key: 'x', url: row.url, label: t('openOnGitHub') }))
+  const lines: ReactNode[] = [createElement('div', { key: 'l1', className: 'pi-line1' }, identity)]
+
+  if (density === 'detailed') {
+    const facts: ReactNode[] = [createElement(Author, { key: 'a', login: row.author, withAvatar: false })]
+    if (row.mergedAt !== undefined) {
+      facts.push(createElement(Tag, { key: 'm', tone: 'info' }, `${t('mergedAt')} ${formatAge(row.mergedAt)}`))
+    }
+    for (const label of row.labels.slice(0, 4)) {
+      facts.push(createElement(Tag, { key: `l:${label}`, tone: 'neutral' }, label))
+    }
+    if (row.labels.length > 4) {
+      facts.push(createElement(Tag, { key: 'l+', tone: 'quiet' }, `+${row.labels.length - 4}`))
+    }
+    if (row.comments > 0) {
+      facts.push(createElement(Tag, { key: 'c', tone: 'quiet' }, tf('commentsCount', { count: row.comments })))
+    }
+    lines.push(createElement('div', { key: 'l2', className: 'pi-line2' }, facts))
   }
-  const pills: ReactNode[] = [createElement(Author, { key: 'a', login: row.author, ...(avatar === undefined ? {} : { avatar }) })]
-  if (row.mergedAt !== undefined) {
-    pills.push(createElement(Tag, { key: 'm', tone: 'info' }, `${t('mergedAt')} ${formatAge(row.mergedAt)}`))
-  }
-  for (const label of row.labels.slice(0, 4)) {
-    pills.push(createElement(Tag, { key: `l:${label}`, tone: 'neutral' }, label))
-  }
-  if (row.labels.length > 4) {
-    pills.push(createElement(Tag, { key: 'l+', tone: 'quiet' }, `+${row.labels.length - 4}`))
-  }
-  if (row.comments > 0) {
-    pills.push(createElement(Tag, { key: 'c', tone: 'quiet' }, tf('commentsCount', { count: row.comments })))
-  }
+
   return createElement('div', {
     ...handlers,
     className: 'pi-row',
-    'data-density': 'detailed',
+    'data-density': density,
     'data-pr-row': String(row.number),
     'data-selected': props.selected ? 'true' : undefined,
+    // 简洁档没有独立的事实行，作者名由原生 tooltip 补上（头像已在行首给出作者）。
+    ...(density === 'compact' ? { title: `${row.author} · ${formatAge(row.updatedAt)}` } : {}),
   }, [
-    createElement('div', { key: 'l1', className: 'pi-line1' }, [
-      num, subject,
-      row.isDraft ? createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')) : null,
-      external,
-      createElement(Age, { key: 'm', iso: row.updatedAt }),
-    ]),
-    createElement('div', { key: 'l2', className: 'pi-line2' }, pills),
+    createElement('span', { key: 'a', className: 'pi-avatarCell' },
+      createElement(Avatar, { login: row.author, ...(avatar === undefined ? {} : { url: avatar }) })),
+    createElement('div', { key: 'm', className: 'pi-main' }, lines),
   ])
 }
 

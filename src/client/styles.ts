@@ -36,7 +36,11 @@ const CSS = `
 
 /* ── 列表 ───────────────────────────────────────────────────────────────── */
 .pi-body { flex: 1; min-height: 0; overflow: auto; padding: 0 0 8px; }
-.pi-section + .pi-section { border-top: 0.5px solid var(--dsw-alias-border-l1); }
+/* 分区分界 = 「上一区块的行线 + 28px 头带 + 头带底线」两道线夹一条带；
+   行与行之间只有一道线。同一档线（l2）靠**线的数量与带的间隔**区分层级，
+   而不是靠线本身的深浅——官方 border-l1..l4 的浅端（l1 = 4% 黑）在浅色主题下
+   几乎看不见，做行边界不合格（这也是上一轮详情分块踩过的同一个坑）。 */
+.pi-section + .pi-section { border-top: 0.5px solid var(--dsw-alias-border-l2); }
 .pi-sectionHeader {
   box-sizing: border-box;
   display: flex;
@@ -46,11 +50,16 @@ const CSS = `
   height: 28px;
   padding: 0 12px;
   border: none;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
-  background: none;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);
   font: var(--dsw-font-xxs-strong-12);
   cursor: pointer;
+  /* 分区头在长列表里跟随滚动：条带自身填底（官方 bg-base），否则行会从字下面穿过。
+     z-index 必须给：PR 行是定位元素（选中竖条的定位上下文），不压上去就会被盖住。 */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--dsw-alias-bg-base);
 }
 .pi-sectionLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pi-sectionCount {
@@ -61,32 +70,68 @@ const CSS = `
 }
 /* 「待我审」有货时计数取警告色：这是面板里唯一「需要你动作」的信号。 */
 .pi-sectionCount[data-attention='true'] { color: var(--dsw-alias-state-warn-primary); }
-.pi-hint { flex: none; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+.pi-hint { flex: none; margin-left: auto; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
 .pi-chevron { flex: none; display: inline-flex; color: var(--dsw-alias-label-tertiary); transition: transform 120ms var(--ds-ease-in-out); }
 .pi-section[data-open='false'] .pi-chevron { transform: rotate(-90deg); }
 .pi-section[data-open='false'] .pi-rows { display: none; }
 
+/* 一行 = 「行首头像列 + 内容列」的通栏条带。条带满宽铺开（与分区头同一套几何）：
+   实测浅色主题下宿主各层填充全是 #fff，静止行没有填充差可依，**行与行的边界只能靠
+   0.5px 中性发丝线**——这也正是官方「中性边框/分隔线一律 0.5px」的用法。 */
 .pi-row {
   box-sizing: border-box;
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 10px;
-  margin: 2px 6px;
-  border-radius: var(--dsw-radius-sm);
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 10px 5px 12px;
   cursor: pointer;
+  animation: pi-row-in 150ms var(--ds-ease-in-out);
 }
+.pi-row + .pi-row { border-top: 0.5px solid var(--dsw-alias-border-l2); }
 .pi-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pi-row[data-selected='true'] { background: var(--dsw-alias-interactive-bg-active); }
-.pi-row[data-density='compact'] {
-  height: 28px;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
+/* 当前项再加官方那根 2px 内嵌强调条（伪元素，行高不因此变化）。 */
+.pi-row[data-selected='true']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--dsw-alias-state-business-primary);
 }
-.pi-line1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pi-row:focus-visible { outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent); outline-offset: -1px; }
+
+/* 头像列：**两种密度同宽同 x、与首行中线对齐**——「头像固定在行首」的几何保证。
+   高度 20px = 首行高度，所以详细档两行时头像仍钉在标题那一行的中线上。 */
+.pi-avatarCell {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 20px;
+}
+.pi-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* 简洁档 = 只有首行（28px 通栏，官方控件高度）；详细档 = 首行 + 事实行。 */
+.pi-row[data-density='compact'] { align-items: center; height: 28px; padding-top: 0; padding-bottom: 0; }
+.pi-line1 { display: flex; align-items: center; gap: 8px; min-width: 0; height: 20px; }
 .pi-line2 { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.pi-age { flex: none; display: inline-flex; align-items: center; }
+/* 「在 GitHub 打开」静止时不占视线（官方/sidebar 惯例：hover 或键盘聚焦才现形）。
+   opacity + pointer-events：静止时那 24px 点击**穿透到行**（开详情），不会误开外链。
+   触屏没有 hover，那里常显。 */
+.pi-row .pi-external { opacity: 0; pointer-events: none; transition: opacity 120ms var(--ds-ease-in-out); }
+.pi-row:hover .pi-external, .pi-row:focus-within .pi-external { opacity: 1; pointer-events: auto; }
+@media (hover: none) {
+  .pi-row .pi-external { opacity: 1; pointer-events: auto; }
+}
+@keyframes pi-row-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pi-row { animation: none; }
+}
 .pi-num {
   flex: none;
   padding: 1px 4px;

@@ -7,6 +7,7 @@
  * 把浏览器的破图图标露给用户。
  */
 import { createElement, useState } from 'react'
+import type { ReactNode } from 'react'
 import { formatAge, isFresh } from './format'
 
 /** 16px 圆头像；加载失败或没有 URL 时回退成首字母（同一几何，视觉上不跳）。 */
@@ -28,8 +29,11 @@ export function Avatar({ login, url }: { login: string, url?: string }) {
   })
 }
 
-/** 作者名 + 头像。`href` 给出时按官方链接外观渲染（详情页用），列表里只显示名字。 */
-export function Author({ login, avatar, href }: { login: string, avatar?: string, href?: string }) {
+/**
+ * 作者名（+ 可选头像）。列表里头像已经固定在行首的独立列（两种密度同一 x），
+ * 所以那里只出名字；详情页的作者行仍然「头像 + 名字」并排。
+ */
+export function Author({ login, avatar, href, withAvatar = true }: { login: string, avatar?: string, href?: string, withAvatar?: boolean }) {
   const name = href === undefined
     ? createElement('span', { key: 'l' }, login)
     : createElement('a', {
@@ -37,10 +41,10 @@ export function Author({ login, avatar, href }: { login: string, avatar?: string
       target: '_blank', rel: 'noopener noreferrer',
       onClick: (event: { stopPropagation: () => void }) => { event.stopPropagation() },
     }, login)
-  return createElement('span', { className: 'pi-authorName' }, [
-    createElement(Avatar, { key: 'a', login, ...(avatar === undefined ? {} : { url: avatar }) }),
-    name,
-  ])
+  const children: ReactNode[] = []
+  if (withAvatar) children.push(createElement(Avatar, { key: 'a', login, ...(avatar === undefined ? {} : { url: avatar }) }))
+  children.push(name)
+  return createElement('span', { className: 'pi-authorName' }, children)
 }
 
 /** 相对时间；24h 内动过的行取第二层色阶（`.pi-meta[data-fresh]`）。 */
