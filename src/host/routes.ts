@@ -7,7 +7,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { PrInboxError } from './gh'
-import { listOp, statusOp } from './ops'
+import { detailOp, listOp, statusOp } from './ops'
 
 export const ROUTE_PATH = '/plugins/dsh-pr-inbox/api'
 
@@ -30,6 +30,7 @@ type OpHandler = (payload: Record<string, unknown>) => Promise<unknown>
 const OPS: Record<string, OpHandler> = {
   status: statusOp,
   list: listOp,
+  detail: detailOp,
 }
 
 function webServerOf(ctx: unknown): WebServerService | undefined {

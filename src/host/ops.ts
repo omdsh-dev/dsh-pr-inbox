@@ -1,8 +1,9 @@
 /**
- * 路由 op 的实现：`status`（绑定 + 环境自检）与 `list`（三桶）。
- * 详情（`detail`）在此文件追加，协议不变。
+ * 路由 op 的实现：`status`（绑定 + 环境自检）、`list`（三桶）、`detail`（单个 PR）。
+ * 三个 op 的协议一致：校验入参 → 取数 → 返回可 JSON 化的值。
  */
 import type { StatusValue } from '../shared/types'
+import { detailOp } from './detail'
 import { probeGh } from './gh'
 import { listOp } from './prs'
 import { detectRepo, requireAbsoluteCwd } from './repo'
@@ -14,4 +15,4 @@ export async function statusOp(payload: Record<string, unknown>): Promise<Status
   return { gh, repo: repo ?? null }
 }
 
-export { listOp }
+export { detailOp, listOp }

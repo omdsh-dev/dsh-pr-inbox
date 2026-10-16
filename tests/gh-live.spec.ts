@@ -4,6 +4,7 @@
  * 以及确认三桶的限定词在真 GitHub 上确实是我们要的那三批 PR。
  */
 import { describe, expect, it } from 'vitest'
+import { detailOp } from '../src/host/detail'
 import { listOp } from '../src/host/prs'
 
 const LIVE = process.env.PR_INBOX_LIVE === '1'
@@ -28,5 +29,23 @@ describe.skipIf(!LIVE)('live gh buckets (PR_INBOX_LIVE=1)', () => {
     expect(value.buckets.merged.rows.length).toBeLessThanOrEqual(20)
     expect(value.buckets.authored.error).toBeUndefined()
     expect(value.buckets.merged.error).toBeUndefined()
+  }, 90_000)
+
+  it('reads one real PR detail (body / timeline / files)', async () => {
+    const detail = await detailOp({ cwd: WORKSPACE, number: 969 })
+    console.log(`detail #${detail.number} ${detail.title}`)
+    console.log(`  body ${detail.body.length} chars (truncated=${detail.bodyTruncated}) · ${detail.additions}+ ${detail.deletions}- · ${detail.changedFiles} files · ${detail.commits} commits`)
+    console.log(`  base=${detail.baseRef} head=${detail.headRef} state=${detail.state} draft=${detail.isDraft}`)
+    console.log(`  files(returned)=${detail.files.length} truncated=${detail.filesTruncated} · timeline=${detail.timeline.length} truncated=${detail.timelineTruncated}`)
+    console.log(`  warnings=${JSON.stringify(detail.warnings)}`)
+    for (const file of detail.files.slice(0, 5)) console.log(`   ${file.status} ${file.path} +${file.additions} -${file.deletions}`)
+    expect(detail.number).toBe(969)
+    expect(detail.author).toBe('vlln')
+    expect(detail.baseRef).toBe('dev')
+    expect(detail.body.length).toBeGreaterThan(0)
+    expect(detail.changedFiles).toBeGreaterThan(0)
+    expect(detail.files.length).toBeGreaterThan(0)
+    expect(detail.filesTruncated).toBe(false)
+    expect(detail.warnings).toEqual([])
   }, 90_000)
 })
