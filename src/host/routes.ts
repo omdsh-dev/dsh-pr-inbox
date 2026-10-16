@@ -7,6 +7,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { PrInboxError } from './gh'
+import { IMAGE_PATH, imageHandler } from './image'
 import { detailOp, listOp, statusOp } from './ops'
 
 export const ROUTE_PATH = '/plugins/dsh-pr-inbox/api'
@@ -105,9 +106,15 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   }
 }
 
-/** 挂路由；返回 disposer（`ctx.effect` 的返回值）。webServer 缺席时安静降级。 */
+/** 挂两条路由（JSON op 表 + 图片字节代理）；返回 disposer（`ctx.effect` 的返回值）。
+ *  webServer 缺席时安静降级。 */
 export function registerRoutes(ctx: unknown): () => void {
   const server = webServerOf(ctx)
   if (server === undefined) return () => {}
-  return server.register({ kind: 'exact', path: ROUTE_PATH, handler: (req, res) => { void handle(req, res) } })
+  const disposers = [
+    server.register({ kind: 'exact', path: ROUTE_PATH, handler: (req, res) => { void handle(req, res) } }),
+    // 图片必须由 host 取字节再同源发：本环境 *.githubusercontent.com 不可达（见 image.ts 头注释）。
+    server.register({ kind: 'exact', path: IMAGE_PATH, handler: (req, res) => { void imageHandler(req, res) } }),
+  ]
+  return () => { for (const dispose of disposers) dispose() }
 }

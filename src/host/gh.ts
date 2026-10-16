@@ -37,6 +37,32 @@ export function classifyGhFailure(detail: string): PrInboxError {
   return new PrInboxError(text === '' ? 'gh 命令失败' : text, 'gh-error', 502)
 }
 
+/** gh 子进程统一环境（分页/交互/颜色/提示都关掉，解析不依赖终端能力）。 */
+function ghEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GH_PAGER: 'cat',
+    GH_PROMPT_DISABLED: '1',
+    GH_NO_UPDATE_NOTIFIER: '1',
+    NO_COLOR: '1',
+    GIT_TERMINAL_PROMPT: '0',
+  }
+}
+
+/** 把 execFile 的失败翻译成带错误码的插件错误（两个 runner 共用）。 */
+function ghExecFailure(error: NodeJS.ErrnoException, stderr: string, timeoutMs: number, tooLargeCode: string): PrInboxError {
+  if (error.code === 'ENOENT') {
+    return new PrInboxError('未找到 gh CLI（请安装 GitHub CLI 并 `gh auth login`）', 'gh-missing', 501)
+  }
+  if (error.code === tooLargeCode) {
+    return new PrInboxError('文件超过本插件允许的大小', 'too-large', 413)
+  }
+  if (error.code === 'ETIMEDOUT' || (error as { killed?: boolean }).killed === true) {
+    return new PrInboxError(`gh 命令超时（${Math.round(timeoutMs / 1000)}s）`, 'gh-timeout', 504)
+  }
+  return classifyGhFailure(stderr.trim() || error.message)
+}
+
 /** 跑一条 gh 命令，返回 stdout。失败的分类在这一层统一做掉。 */
 export async function runGh(args: readonly string[], timeoutMs = GH_TIMEOUT_MS): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
@@ -45,28 +71,31 @@ export async function runGh(args: readonly string[], timeoutMs = GH_TIMEOUT_MS):
       timeout: timeoutMs,
       maxBuffer: GH_MAX_OUTPUT,
       windowsHide: true,
-      // GH_PAGER 关掉分页；GH_PROMPT_DISABLED 关掉交互式提问（没有 TTY 时会挂）；
-      // NO_COLOR 让解析不依赖终端能力。
-      env: {
-        ...process.env,
-        GH_PAGER: 'cat',
-        GH_PROMPT_DISABLED: '1',
-        GH_NO_UPDATE_NOTIFIER: '1',
-        NO_COLOR: '1',
-        GIT_TERMINAL_PROMPT: '0',
-      },
+      env: ghEnv(),
     }, (error, stdout, stderr) => {
       if (error === null || error === undefined) { resolve(stdout); return }
-      const code = (error as NodeJS.ErrnoException).code
-      if (code === 'ENOENT') {
-        reject(new PrInboxError('未找到 gh CLI（请安装 GitHub CLI 并 `gh auth login`）', 'gh-missing', 501))
-        return
-      }
-      if (code === 'ETIMEDOUT' || (error as { killed?: boolean }).killed === true) {
-        reject(new PrInboxError(`gh 命令超时（${Math.round(timeoutMs / 1000)}s）`, 'gh-timeout', 504))
-        return
-      }
-      reject(classifyGhFailure(stderr.trim() || error.message))
+      reject(ghExecFailure(error as NodeJS.ErrnoException, stderr, timeoutMs, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'))
+    })
+  })
+}
+
+/**
+ * 二进制读（图片等字节流）：stdout 以 **Buffer** 回——用 utf8 解码会把字节弄坏。
+ *
+ * `maxBuffer` 就是硬上限：超了 Node 杀掉子进程并回
+ * `ERR_CHILD_PROCESS_STDIO_MAXBUFFER`，调用方据此回 413，**大文件从不整体进内存**。
+ */
+export async function runGhBuffer(args: readonly string[], maxBuffer = GH_MAX_OUTPUT, timeoutMs = GH_TIMEOUT_MS): Promise<Buffer> {
+  return await new Promise<Buffer>((resolve, reject) => {
+    execFile('gh', [...args], {
+      encoding: 'buffer',
+      timeout: timeoutMs,
+      maxBuffer,
+      windowsHide: true,
+      env: ghEnv(),
+    }, (error, stdout, stderr) => {
+      if (error === null || error === undefined) { resolve(stdout as unknown as Buffer); return }
+      reject(ghExecFailure(error as NodeJS.ErrnoException, String(stderr), timeoutMs, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'))
     })
   })
 }

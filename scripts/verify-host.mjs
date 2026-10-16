@@ -115,6 +115,27 @@ try {
   const bad = await call('detail', { number: 0 })
   check(bad.status === 400 && bad.body?.error?.code === 'bad-request', `坏编号没有回 400/bad-request（得到 ${bad.status}）`)
   console.log('✅ 入参围栏：number=0 → 400 bad-request')
+
+  // ── ⑤ 图片代理：host 取字节再同源发（*.githubusercontent.com 在本环境不可达）──
+  //    拿本仓自己的 icon.svg 打这条路由：必须 200 + image/* + 字节数 > 0。
+  const image = async (params) => {
+    const response = await api.get(`${origin}/plugins/dsh-pr-inbox/image?${new URLSearchParams({ cwd: resolve(cwd), ...params })}`, {
+      headers: { cookie: cookieHeader, host, origin },
+    })
+    const bytes = await response.body()
+    return { status: response.status(), type: response.headers()['content-type'] ?? '', length: bytes.length, bytes }
+  }
+  const icon = await image({ ref: 'dev', path: 'icon.svg' })
+  check(icon.status === 200, `图片代理未回 200（得到 ${icon.status}：${icon.bytes.subarray(0, 120).toString('utf8')}）`)
+  check(icon.type.startsWith('image/'), `图片代理 content-type 不是 image/*（得到 ${icon.type}）`)
+  check(icon.length > 0, `图片代理回 0 字节`)
+  if (icon.status === 200) console.log(`✅ image：icon.svg@dev → 200 · ${icon.type} · ${icon.length} 字节`)
+  // 两条活体围栏（与单测互补：这里走的是真实路由 + 真实 gh）。
+  const traversal = await image({ ref: 'dev', path: '../package.json' })
+  check(traversal.status === 400, `路径穿越没有回 400（得到 ${traversal.status}）`)
+  const nonImage = await image({ ref: 'dev', path: 'README.md' })
+  check(nonImage.status === 415, `非图片没有回 415（得到 ${nonImage.status}）`)
+  console.log('✅ 图片围栏：`../package.json` → 400 · `README.md` → 415')
 } finally {
   await api.dispose()
 }
@@ -123,4 +144,4 @@ if (failed) {
   console.error('host 路由自检未全通')
   process.exit(1)
 }
-console.log('✅ host 路由自检全通（status / list / detail / 入参围栏）')
+console.log('✅ host 路由自检全通（status / list / detail / image / 入参围栏）')
