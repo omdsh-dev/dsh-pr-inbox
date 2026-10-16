@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # dsh-pr-inbox 的真实挂载门（隔离 DSH_HOME，不碰 ~/.dsh 与任何在跑的 GUI）：
 #   构建 → 打包 → 装进全新 profile（better-sidebar + 本插件）→ 起实例
-#   → ① host 路由（gh + 工作区绑定 + 图片代理）② 浏览器级（右栏条目 + 面板渲染）
+#   → ① host 路由（gh + 工作区绑定 + 图片代理）② 浏览器级（右栏条目 + 面板渲染 + 行几何）
 #   → ③ 插件图标（Plugins 页里宿主把 icon.svg 变成图片）
+#
+# 环境变量：THEME=dark 让浏览器按深色偏好加载（宿主读 prefers-color-scheme），
+# 于是同一套断言与截图都能在深色下再跑一遍（截图名带 -dark 后缀）。
 #
 # 用法： scripts/gates/mounted.sh <workspace 路径> [期望的 owner/repo]
 # 前置：本机 gh 已登录（门会真的打 GitHub API）、Playwright 驱动与浏览器（见 lib/playwright.mjs）。

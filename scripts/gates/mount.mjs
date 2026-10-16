@@ -60,8 +60,11 @@ const session = await rpc('session.create', { workspaceId: workspace.workspace.w
 step(`种子会话 ${session.sessionId}`)
 
 // ── 3) 浏览器：加载外壳 → 关掉 keyless 的引导弹层 ────────────────────────────
+// 主题：宿主按 `prefers-color-scheme` 决定（`<html data-ds-theme-source="system">`），
+// 所以 `THEME=dark` 用 chromium 的 colorScheme 就能拿到**真的**深色（不是滤镜）。
+const THEME = process.env.THEME === 'dark' ? 'dark' : 'light'
 const browser = await chromium.launch()
-const page = await browser.newPage()
+const page = await browser.newPage(THEME === 'dark' ? { colorScheme: 'dark' } : {})
 const pageErrors = []
 page.on('pageerror', error => pageErrors.push(String(error)))
 await page.goto(launchUrl, { waitUntil: 'domcontentloaded' })
@@ -100,6 +103,27 @@ step(`原生右栏列出了 PR 条目（${TAB_ID}）`)
 await entry.click()
 const panel = page.locator('[data-dsh-pr-inbox-panel]')
 await panel.first().waitFor({ timeout: 60_000 })
+
+// 主题自证：说"深色验收过了"之前，先证明**确实是深色**——否则深色截图什么也没证明。
+const themeFact = await page.evaluate(() => {
+  let node = document.querySelector('[data-dsh-pr-inbox-panel]')
+  let fill = 'rgba(0, 0, 0, 0)'
+  while (node !== null) {
+    const value = getComputedStyle(node).backgroundColor
+    if (value !== 'rgba(0, 0, 0, 0)' && value !== 'transparent') { fill = value; break }
+    node = node.parentElement
+  }
+  const match = /rgba?\((\d+), (\d+), (\d+)/.exec(fill)
+  const luminance = match === null ? -1 : Math.round((Number(match[1]) + Number(match[2]) + Number(match[3])) / 3)
+  return { colorScheme: getComputedStyle(document.documentElement).colorScheme, fill, luminance }
+})
+console.log(`· 主题：THEME=${THEME} · color-scheme=${themeFact.colorScheme} · 面板底 ${themeFact.fill}（亮度 ${themeFact.luminance}）`)
+if (THEME === 'dark' && !(themeFact.luminance >= 0 && themeFact.luminance < 110)) {
+  fail(`THEME=dark 但面板底不是深色（${themeFact.fill}）：深色验收没成立`)
+}
+if (THEME === 'light' && themeFact.luminance >= 0 && themeFact.luminance < 110) {
+  fail(`THEME=light 但面板底是深色（${themeFact.fill}）：主题没跟随系统偏好`)
+}
 
 // 等三桶与行数据落下来（gh 三条真实查询要几秒）。
 await page.locator('[data-bucket="authored"]').waitFor({ timeout: 60_000 })
@@ -143,8 +167,9 @@ const shoot = async (name) => {
   if (shotDir === undefined) return
   const { mkdirSync } = await import('node:fs')
   mkdirSync(shotDir, { recursive: true })
-  await page.screenshot({ path: `${shotDir}/${name}.png` })
-  console.log(`· 截图：${shotDir}/${name}.png`)
+  const file = `${name}${THEME === 'dark' ? '-dark' : ''}`
+  await page.screenshot({ path: `${shotDir}/${file}.png` })
+  console.log(`· 截图：${shotDir}/${file}.png`)
 }
 console.log(`· 头像位：${avatarState.slots} 个（网络图 ${avatarState.loaded} / 首字母 ${avatarState.initials} / 破图 ${avatarState.broken} / 悬挂 ${avatarState.pending}）`)
 if (avatarState.slots === 0) fail('列表里没有任何头像位（host 的 authorAvatar 没传到 UI？）')

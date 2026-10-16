@@ -76,7 +76,7 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 | 门 | 证明什么 | 最近一次实测 |
 |---|---|---|
 | `git-source` | **真实发布通道**（`git+file://` 等价于 README 给用户的 `github:` 源）装得上、boot 干净、路由真应答 | 全绿：无 ERESOLVE（git 依赖不装 devDependencies）、日志 0 失败行、三 op + 围栏通过 |
-| `mounted` | 隔离 profile 里真装真跑：右栏条目出现 → 面板渲染出绑定的项目 → 行几何/分层/贴顶/头像都量成数字 | 全绿：行高 28/50、头带 47、行首留白 12、头像 x=717 两档一致、行线 1px/`rgba(0,0,0,0.1)`、贴顶 y=滚动口上沿、头像 22/22 无破图无悬挂 |
+| `mounted` | 隔离 profile 里真装真跑：右栏条目出现 → 面板渲染出绑定的项目 → 行几何/分层/贴顶/头像都量成数字。`THEME=dark` 再跑一遍（深色截图 + 主题自证） | 全绿：行高 28/50、头带 47、行首留白 12、头像 x=717 两档一致、行线 1px/`rgba(0,0,0,0.1)`、贴顶 y=滚动口上沿、头像 22/22 无破图无悬挂 |
 | `negative-control` | 负控：坏副本必须**响亮**报错，否则上面那条「日志干净」不算证据 | 全绿：A 基线 `entry:true`；B 坏 host → `did not activate` + `pending (waiting for service: …)` + 路由 405；C 坏 client → 条目不出现 + 控制台 `web boot: 1 entry did not activate` |
 | `standalone` | better-sidebar 缺席时：host 半照常应答、client 半安全未激活 | 全绿 |
 
@@ -100,19 +100,29 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 
 ## 5. 视觉自检的现状
 
-已做（机械/几何）：
+已做（机械/几何，两套主题各一遍）：
 
-- 浅色主题下量过：行几何坐标、发丝线颜色、圆角、卡片数、选中强调条（伪元素）、
+- **深色**：宿主的主题来自 `prefers-color-scheme`（`<html data-ds-theme-source="system">`），
+  所以 `THEME=dark bash scripts/gates/mounted.sh <仓库>` 用 chromium 的 colorScheme 拿到
+  真的深色（不是滤镜），并**自证是深色**（实测 `color-scheme=dark`、面板底 `rgb(21,21,23)`、
+  亮度 22）——否则"深色截图"什么也没证明。深色下的实测数字：
+  行线 `1px/rgba(255,255,255,0.12)`、详情卡片填充 `rgb(44,44,46)` vs 面板底 `rgb(21,21,23)`
+  （**填充差在深色下才重新起作用**，与 §3 第一条互为印证）、选中强调条 `rgb(122,170,255)`、
+  行几何与浅色逐项相同。
+- 浅色：行几何坐标、发丝线 `rgba(0,0,0,0.1)`、圆角、卡片数、选中强调条（伪元素）、
   贴顶位置、头像槽全部 settle。
-- 状态覆盖：静止 / hover（外链现形）/ 选中 / `:focus-visible`（官方 outline）/
-  折叠分区；`prefers-reduced-motion` 有分支。
-- 样式没被宿主吃掉：**在真实 GUI 里**取的计算样式（不是看源码）。
+- 状态覆盖：静止 / hover（外链现形）/ 选中 / `:focus-visible`（官方 outline）/ 折叠分区；
+  `prefers-reduced-motion` 有分支。
+- 样式没被宿主吃掉：**在真实 GUI 里**取的计算样式（不是看源码），且 `theme-tokens` 门
+  机械地挡住"写死颜色 / 自带主题分支"这个根因。
 
-未做（需要人的眼睛）：
+仍需人的眼睛（agent 侧读不到图像）：
 
-- 深色主题实看（token-only 写法在机制上成立，但没有目视证据）。
-- 图标在 Plugins 页真实尺寸下的观感（机械证据：data URL、36×36、`naturalWidth>0`）。
+- 图标与界面的**观感**（机械证据：Plugins 页里 data URL、36×36、`naturalWidth>0`、
+  行上显示的是 locale 标题「PR Inbox」）。
 - 窄侧栏（<320px）下长标签/长标题的观感。
+- 深色截图已产出（`docs/preview/compact-dark.png` / `detail-dark.png`），但"好不好看"
+  这一步没有替代品。
 
 ## 6. 决策记录索引
 

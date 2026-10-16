@@ -103,4 +103,4 @@ gh api graphql -f query='{ repository(owner: "deepseek-ai", name: "deepseek-harn
 - 只读：没有任何写操作，也不接管聊天里的 GitHub 链接
 - 需要本机 `gh` 已登录（凭据不进插件、不进设置、不进模型上下文——有意的取舍）
 - `最近合并` 是最近 20 条，不是时间窗；搜索只在已加载的行里做
-- 深色主题与窄侧栏的**观感**尚未人工目视（机械证据见 engineering-notes §5）
+- 深色已机械验证并留了截图；**图标观感与窄侧栏**仍需人工目视（见 engineering-notes §5）

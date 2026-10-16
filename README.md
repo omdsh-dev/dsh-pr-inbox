@@ -62,7 +62,10 @@ dsh plugin --profile web add "github:vlln/dsh-pr-inbox"
 | **点开一行** | 面板内打开完整 PR：正文（markdown 渲染，图片走宿主代理）、评论与评审时间线、改动文件清单（状态色标 + 增删行数）；`返回列表` 回到原位，当前项有强调条 |
 | **状态行** | 底部常显绑定的仓库、当前 gh 账号与数据的读取时间 |
 
-![三桶列表（详细档）](docs/preview/detailed.png)
+<p align="center">
+  <img alt="浅色" src="docs/preview/detailed.png" width="46%">
+  <img alt="深色" src="docs/preview/compact-dark.png" width="46%">
+</p>
 
 ![PR 详情（正文 / 时间线 / 文件清单）](docs/preview/detail.png)
 
