@@ -1,69 +1,90 @@
 /**
  * PR 详情视图：**插件自己渲染**（不嵌网页、不跳浏览器）。
  *
- * 数据全部来自 host 的 `detail` op（`PrDetailValue`）：正文、review/评论时间线、
- * 改动文件清单；三者都可能被**如实**截断（`bodyTruncated` / `timelineTruncated`
- * / `filesTruncated`），支线失败则进 `warnings` —— 详情因此永不因为一条支线失败
- * 变空白。
+ * 正文与评论直接用**宿主的 markdown 渲染器** `MarkdownText`
+ * （`@deepseek-ai/dsh-client-ui-primitives`）——它自带 GFM + TeX、围栏代码走官方
+ * `CodeBlock`、丢弃原始 HTML、限制协议；`labels` 是必填契约（复制/脚注/代码卡工具栏
+ * 文案），走本插件字典，漏传会回退硬编码中文。
  *
- * 规格与列表同一套（见 styles.ts）：36px 头带放返回 + 标题 + 刷新 + 外链，
- * 关卡式分区标题 28px，正文与评论这一版是**纯文本 + 保留换行**。
+ * 其余官方件：`Tag`（身份/状态/标签/文件状态）、`Button`（返回/刷新/外链）、
+ * `PathLabel`（文件路径：目录弱化、文件名主色、窄列保后缀）、官方图标。
+ *
+ * 有界与降级如实呈现：三处截断各一行提示，`warnings` 逐条列出——详情不因支线失败空白。
  */
-import { createElement } from 'react'
+import { createElement, useMemo } from 'react'
 import type { ReactNode } from 'react'
+import {
+  Button,
+  IconBranchOutlineRegular,
+  IconChevronLeftOutlineRegular,
+  IconLinkOutlineRegular,
+  IconRefreshOutlineRegular,
+  MarkdownText,
+  PathLabel,
+  Tag,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PrDetailComment, PrDetailFile, PrDetailValue } from '../shared/types'
 import { formatAge, formatDate } from './format'
-import { ExternalIcon, RefreshIcon } from './icons'
-import { L } from './labels'
+import type { I18n } from './i18n'
 
-/** 文件状态 → 药丸色调（与 bsb 的 statusBadge 同一套语义色）。 */
-const FILE_TONE: Record<string, string> = {
-  added: 'merged',
-  removed: 'error',
-  modified: 'draft',
-  renamed: 'review',
-  copied: 'review',
+/** 文件状态 → 官方 Tag 色调 + 文案键。 */
+const FILE_TONE: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'neutral'> = {
+  added: 'success',
+  removed: 'danger',
+  modified: 'warning',
+  renamed: 'info',
+  copied: 'info',
+}
+const FILE_KEY: Record<string, string> = {
+  added: 'added',
+  removed: 'removed',
+  modified: 'modified',
+  renamed: 'renamed',
+  copied: 'copied',
+  changed: 'changed',
+  unchanged: 'unchanged',
+}
+const REVIEW_TONE: Record<string, 'success' | 'danger' | 'neutral' | 'quiet'> = {
+  APPROVED: 'success',
+  CHANGES_REQUESTED: 'danger',
+  COMMENTED: 'neutral',
+  DISMISSED: 'quiet',
+  PENDING: 'quiet',
+}
+const REVIEW_KEY: Record<string, string> = {
+  APPROVED: 'reviewApproved',
+  CHANGES_REQUESTED: 'reviewChangesRequested',
+  COMMENTED: 'reviewCommented',
+  DISMISSED: 'reviewDismissed',
+  PENDING: 'reviewPending',
 }
 
-function fileTone(status: string): string {
-  return FILE_TONE[status] ?? 'quiet'
-}
-
-function fileLabel(status: string): string {
-  const labels = L.fileStatus as Record<string, string | undefined>
-  return labels[status] ?? status
-}
-
-function IconButton(props: { icon: ReactNode; label: string; onClick: () => void; spinning?: boolean }) {
-  return createElement('button', {
-    type: 'button', className: 'pi-iconButton', title: props.label, 'aria-label': props.label,
-    'data-spinning': props.spinning === true ? 'true' : undefined,
-    onClick: props.onClick,
-  }, props.icon)
-}
-
-function Comment({ entry }: { entry: PrDetailComment }) {
-  const pills: ReactNode[] = [
-    createElement('span', { key: 'a', className: 'pi-pill', 'data-tone': 'author' }, entry.author),
-  ]
+function Comment({ entry, labels, i18n }: { entry: PrDetailComment, labels: MarkdownLabels, i18n: I18n }) {
+  const { t } = i18n
+  const head: ReactNode[] = [createElement(Tag, { key: 'a', tone: 'quiet' }, entry.author)]
   if (entry.kind === 'review') {
     const state = entry.reviewState ?? 'COMMENTED'
-    const tone = state === 'APPROVED' ? 'merged' : state === 'CHANGES_REQUESTED' ? 'error' : 'quiet'
-    pills.push(createElement('span', { key: 's', className: 'pi-pill', 'data-tone': tone }, L.reviewState[state] ?? state))
+    head.push(createElement(Tag, { key: 's', tone: REVIEW_TONE[state] ?? 'neutral' }, t(REVIEW_KEY[state] ?? 'reviewCommented')))
   }
-  pills.push(createElement('span', { key: 't', className: 'pi-pill', 'data-tone': 'quiet' }, formatAge(entry.createdAt)))
+  head.push(createElement(Tag, { key: 't', tone: 'quiet' }, formatAge(entry.createdAt)))
   return createElement('div', { className: 'pi-comment', 'data-pi-comment': entry.kind }, [
-    createElement('div', { key: 'h', className: 'pi-commentHead' }, pills),
-    createElement('div', { key: 'b', className: 'pi-prose' }, entry.body === '' ? L.emptyBody : entry.body),
+    createElement('div', { key: 'h', className: 'pi-commentHead' }, head),
+    createElement(MarkdownText, {
+      key: 'b',
+      text: entry.body === '' ? t('emptyBody') : entry.body,
+      labels,
+      variant: 'compact',
+    }),
   ])
 }
 
-function FileRow({ file }: { file: PrDetailFile }) {
-  const name = file.previousPath === undefined ? file.path : file.path
+function FileRow({ file, i18n }: { file: PrDetailFile, i18n: I18n }) {
+  const { t } = i18n
   return createElement('div', { className: 'pi-file', 'data-pi-file': file.path, title: file.path }, [
-    createElement('span', { key: 's', className: 'pi-pill', 'data-tone': fileTone(file.status) }, fileLabel(file.status)),
+    createElement(Tag, { key: 's', tone: FILE_TONE[file.status] ?? 'neutral' }, t(FILE_KEY[file.status] ?? file.status)),
     file.previousPath === undefined ? null : createElement('span', { key: 'o', className: 'pi-fileOld' }, file.previousPath),
-    createElement('span', { key: 'p', className: 'pi-filePath' }, name),
+    createElement(PathLabel, { key: 'p', className: 'pi-filePath', path: file.path }),
     createElement('span', { key: 'c', className: 'pi-fileCounts' }, [
       createElement('span', { key: 'a', className: 'pi-add' }, `+${file.additions}`),
       ' ',
@@ -76,18 +97,41 @@ export interface DetailProps {
   detail: PrDetailValue | undefined
   loading: boolean
   error: string | undefined
+  i18n: I18n
   onBack: () => void
   onRefresh: () => void
 }
 
-export function Detail({ detail, loading, error, onBack, onRefresh }: DetailProps) {
-  const title = detail === undefined ? L.reading : `#${detail.number} ${detail.title}`
+export function Detail({ detail, loading, error, i18n, onBack, onRefresh }: DetailProps) {
+  const { t, tf } = i18n
+  // labels 必须引用稳定（新 identity 会丢掉 MarkdownText 的流式渲染缓存）。
+  const labels = useMemo<MarkdownLabels>(() => ({
+    code: {
+      copyLabel: t('copy'),
+      copiedLabel: t('copiedLabel'),
+      toolbarLabels: { codeLabel: t('codeLabel'), wrapLabel: t('wrapLabel'), unwrapLabel: t('unwrapLabel') },
+    },
+    footnotes: t('footnotes'),
+  }), [t])
+
   const head = createElement('div', { className: 'pi-head' }, [
-    createElement(IconButton, { key: 'b', icon: createElement('span', { 'aria-hidden': true }, '←'), label: L.back, onClick: onBack }),
-    createElement('span', { key: 't', className: 'pi-detailTitle', title }, title),
-    createElement(IconButton, { key: 'r', icon: createElement(RefreshIcon, {}), label: L.refresh, spinning: loading, onClick: onRefresh }),
-    detail === undefined ? null : createElement(IconButton, {
-      key: 'x', icon: createElement(ExternalIcon, {}), label: L.openOnGitHub,
+    createElement(Button, {
+      key: 'b', variant: 'ghost', size: 'sm',
+      icon: createElement(IconChevronLeftOutlineRegular, {}),
+      'data-pi-back': '',
+      'aria-label': t('back'), title: t('back'), onClick: onBack,
+    }),
+    createElement('span', { key: 't', className: 'pi-detailTitle', title: detail === undefined ? '' : `#${detail.number} ${detail.title}` },
+      detail === undefined ? t('reading') : `#${detail.number} ${detail.title}`),
+    createElement(Button, {
+      key: 'r', variant: 'toolbar', size: 'sm',
+      icon: createElement(IconRefreshOutlineRegular, {}),
+      'aria-label': t('refresh'), title: t('refresh'), onClick: onRefresh,
+    }),
+    detail === undefined ? null : createElement(Button, {
+      key: 'x', variant: 'ghost', size: 'sm',
+      icon: createElement(IconLinkOutlineRegular, {}),
+      'aria-label': t('openOnGitHub'), title: t('openOnGitHub'),
       onClick: () => { window.open(detail.url, '_blank', 'noopener,noreferrer') },
     }),
   ])
@@ -97,54 +141,62 @@ export function Detail({ detail, loading, error, onBack, onRefresh }: DetailProp
     body.push(createElement('div', { key: 'e', className: 'pi-notice', 'data-tone': 'error' }, error))
   }
   if (detail === undefined) {
-    body.push(createElement('div', { key: 'l', className: 'pi-empty' }, L.reading))
+    body.push(createElement('div', { key: 'l', className: 'pi-empty' }, t('reading')))
   } else {
     const meta: ReactNode[] = [
-      createElement('span', { key: 'a', className: 'pi-pill', 'data-tone': 'author' }, detail.author),
-      createElement('span', { key: 's', className: 'pi-pill', 'data-tone': detail.mergedAt !== undefined ? 'merged' : detail.state === 'open' ? 'review' : 'quiet' },
-        detail.mergedAt !== undefined ? L.merged : detail.state === 'open' ? L.open : L.closed),
+      createElement(Tag, { key: 'a', tone: 'quiet' }, detail.author),
+      createElement(Tag, {
+        key: 's',
+        tone: detail.mergedAt !== undefined ? 'info' : detail.state === 'open' ? 'outline' : 'neutral',
+      }, detail.mergedAt !== undefined ? t('merged') : detail.state === 'open' ? t('open') : t('closed')),
     ]
-    if (detail.isDraft) meta.push(createElement('span', { key: 'd', className: 'pi-pill', 'data-tone': 'draft' }, L.draft))
-    for (const label of detail.labels) {
-      meta.push(createElement('span', { key: `l:${label}`, className: 'pi-pill', title: label }, label))
-    }
+    if (detail.isDraft) meta.push(createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')))
+    for (const label of detail.labels) meta.push(createElement(Tag, { key: `l:${label}`, tone: 'neutral' }, label))
     body.push(createElement('div', { key: 'meta', className: 'pi-detailMeta', 'data-pi-detail': '' }, meta))
     body.push(createElement('div', { key: 'stats', className: 'pi-detailStats' }, [
-      createElement('span', { key: 'b', className: 'pi-filePath' }, `${detail.baseRef} ← ${detail.headRef}`),
+      createElement('span', { key: 'b', className: 'pi-branch' }, [
+        createElement(IconBranchOutlineRegular, { key: 'i', size: 14 }),
+        `${detail.baseRef} ← ${detail.headRef}`,
+      ]),
       createElement('span', { key: 'a', className: 'pi-add' }, `+${detail.additions}`),
       createElement('span', { key: 'd', className: 'pi-del' }, `−${detail.deletions}`),
-      createElement('span', { key: 'f' }, L.files(detail.changedFiles)),
-      createElement('span', { key: 'c' }, L.commits(detail.commits)),
-      createElement('span', { key: 'u' }, `${L.updated} ${formatAge(detail.updatedAt)}`),
-      detail.mergedAt === undefined ? null : createElement('span', { key: 'm' }, `${L.mergedAt} ${formatDate(detail.mergedAt)}`),
+      createElement('span', { key: 'f' }, tf('files', { count: detail.changedFiles })),
+      createElement('span', { key: 'c' }, tf('commits', { count: detail.commits })),
+      createElement('span', { key: 'u' }, `${t('updated')} ${formatAge(detail.updatedAt)}`),
+      detail.mergedAt === undefined ? null : createElement('span', { key: 'm' }, `${t('mergedAt')} ${formatDate(detail.mergedAt)}`),
     ]))
     for (const warning of detail.warnings) {
       body.push(createElement('div', { key: `w:${warning}`, className: 'pi-notice', 'data-tone': 'warn' }, warning))
     }
-    body.push(createElement('div', { key: 'prose', className: 'pi-prose', 'data-pi-body': '' }, detail.body === '' ? L.emptyBody : detail.body))
+    body.push(createElement('div', { key: 'prose', 'data-pi-body': '' },
+      createElement(MarkdownText, {
+        text: detail.body === '' ? t('emptyBody') : detail.body,
+        labels,
+        variant: 'body',
+      })))
     if (detail.bodyTruncated) {
-      body.push(createElement('div', { key: 'bt', className: 'pi-notice', 'data-tone': 'warn' }, L.bodyTruncated))
+      body.push(createElement('div', { key: 'bt', className: 'pi-notice', 'data-tone': 'warn' }, t('bodyTruncated')))
     }
     body.push(createElement('div', { key: 'th', className: 'pi-sectionTitle' }, [
-      L.timeline,
+      t('timeline'),
       createElement('span', { key: 'n', className: 'pi-sectionCount' }, String(detail.timeline.length)),
     ]))
     if (detail.timeline.length === 0) {
-      body.push(createElement('div', { key: 'te', className: 'pi-empty' }, L.noTimeline))
+      body.push(createElement('div', { key: 'te', className: 'pi-empty' }, t('noTimeline')))
     }
     for (const [index, entry] of detail.timeline.entries()) {
-      body.push(createElement(Comment, { key: `${entry.kind}:${entry.createdAt}:${index}`, entry }))
+      body.push(createElement(Comment, { key: `${entry.kind}:${entry.createdAt}:${index}`, entry, labels, i18n }))
     }
     if (detail.timelineTruncated) {
-      body.push(createElement('div', { key: 'tt', className: 'pi-notice', 'data-tone': 'warn' }, L.timelineTruncated))
+      body.push(createElement('div', { key: 'tt', className: 'pi-notice', 'data-tone': 'warn' }, t('timelineTruncated')))
     }
     body.push(createElement('div', { key: 'fh', className: 'pi-sectionTitle' }, [
-      L.filesTitle,
+      t('filesTitle'),
       createElement('span', { key: 'n', className: 'pi-sectionCount' }, String(detail.changedFiles)),
     ]))
-    for (const file of detail.files) body.push(createElement(FileRow, { key: file.path, file }))
+    for (const file of detail.files) body.push(createElement(FileRow, { key: file.path, file, i18n }))
     if (detail.filesTruncated) {
-      body.push(createElement('div', { key: 'ft', className: 'pi-notice', 'data-tone': 'warn' }, L.filesTruncated))
+      body.push(createElement('div', { key: 'ft', className: 'pi-notice', 'data-tone': 'warn' }, t('filesTruncated')))
     }
   }
 

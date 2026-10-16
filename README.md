@@ -20,6 +20,9 @@ GitHub Pull Request。数据来自**本机已登录的 `gh` CLI**，插件自己
 | **只读 v1** | 不评论、不 approve、不合并；先证明「看」这件事做对了，写操作留到后面单独一批 |
 | **独立插件，不进 better-sidebar 核心** | 核心的 Git 面板刻意保持「纯本地 git、零网络」；GitHub 那半边生态一直在做（`dsh-github-workbench` 等），本插件用 `ctx.betterSidebar` 注册 tab 即可 |
 | 颜色只消费 `--dsw-alias-*` 令牌 | 跟随深浅主题与皮肤中心，插件不持有任何颜色字面量 |
+| **界面复用 DSH 官方控件** | 搜索框 / 按钮 / 密度切换 / 徽标 / 图标 / 文件路径分别用 `Input`、`Button`、`Pill`、`Tag`、官方 `Icon*`、`PathLabel`；官方没有的语义（分区头、PR 行）才自绘，且几何照官方规范（0.5px 分隔线、圆角按角色取 token） |
+| **正文与评论用宿主的 markdown 渲染器** | `MarkdownText`（GFM + TeX，围栏代码走官方 code card，丢弃原始 HTML）；插件不复刻一套排版 |
+| **文案走宿主 locale 字典** | `ctx.locale.register` + `bind(ns)`，跟随 DSH 语言偏好；取词失败落回本地表，绝不在宿主渲染路径里抛错 |
 
 ## 安装
 

@@ -1,28 +1,39 @@
 /**
- * PR 列表面板（阶段二）：三桶分区 + 顶部搜索 + 简洁/详细两种密度。
+ * PR 列表：三桶分区 + 顶部搜索 + 简洁/详细两种密度。
  *
- * 视觉规格照 better-sidebar 的原生尺度（见 styles.ts 的头注释）：36px 头带、
- * 28px 分区头与控件、28px 简洁行、两行式详细行、悬停 hover / 选中 active+2px
- * 强调条；错误一律是纯文本 notice（不画盒子），与 bsb 的 kit 一致。
+ * 控件**全部来自官方** `@deepseek-ai/dsh-client-ui-primitives`（`Input` / `Pill` /
+ * `Button` / `Tag` / 官方图标）——官方铁律是「库里有控件就不要抄第二份」；自绘的只有
+ * 官方没有的语义：分组列表的分区头与 PR 行（几何与颜色照官方规范，见 styles.ts）。
+ * 文案全部经 `i18n`（宿主 locale 服务），不自己判语言。
  *
- * 稳态开销（照 bsb 的硬约束）：只在 `visible` 时取数、不持有定时器、每次可见即
- * 刷一次；列表数据在 host 侧还有 60 s 有界缓存，反复切 tab 不会打爆搜索配额。
+ * 稳态开销：只在 `visible` 时取数、不持定时器、重新可见即补刷一次；host 侧还有
+ * 60 s 有界缓存，反复切 tab 不会打爆搜索配额。
  *
  * 可寻址面（也给挂载自检用）：`[data-dsh-pr-inbox-panel]` / `[data-pi-search]` /
  * `[data-pi-density]` / `[data-bucket]` / `[data-pr-row="<number>"]` / `[data-pi-foot]`。
  */
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
+import {
+  Button,
+  IconChevronDownOutlineRegular,
+  IconLinkOutlineRegular,
+  IconRefreshOutlineRegular,
+  IconSearchOutlineRegular,
+  Input,
+  Pill,
+  Tag,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BucketKey, BucketValue, ListValue, PrDetailValue, PrRow } from '../shared/types'
 import { RouteError, callOp, resolveCwd } from './api'
 import { Detail } from './Detail'
 import { formatAge, matchesQuery } from './format'
-import { ChevronIcon, ExternalIcon, RefreshIcon } from './icons'
-import { L } from './labels'
+import type { I18n } from './i18n'
 
 export interface PanelProps {
   ctx: Context
+  i18n: I18n
   sessionId: string
   cwd: string | undefined
   visible: boolean
@@ -30,8 +41,9 @@ export interface PanelProps {
 
 export type Density = 'compact' | 'detailed'
 
-/** 按桶的顺序渲染（orders 与「与我相关」的紧迫度一致：我先提的 → 等我审 → 已合并）。 */
 const BUCKETS: readonly BucketKey[] = ['authored', 'review', 'merged']
+const BUCKET_LABEL: Record<BucketKey, string> = { authored: 'bucketAuthored', review: 'bucketReview', merged: 'bucketMerged' }
+const BUCKET_HINT: Record<BucketKey, string> = { authored: 'hintAuthored', review: 'hintReview', merged: 'hintMerged' }
 
 type LoadState =
   | { phase: 'loading' }
@@ -47,71 +59,82 @@ const GH_HINT: Record<string, string> = {
   'no-cwd': '先在该会话里打开一个文件或产生一次工具调用，让会话确定工作目录。',
 }
 
-function IconButton(props: {
-  icon: ReactNode
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  spinning?: boolean
-}) {
-  return createElement('button', {
-    type: 'button',
-    className: 'pi-iconButton',
-    title: props.label,
-    'aria-label': props.label,
-    disabled: props.disabled === true,
-    'data-spinning': props.spinning === true ? 'true' : undefined,
-    onClick: props.onClick,
-  }, props.icon)
+/** 行本身是可点面（开详情），右侧 ↗ 是官方 Button——用 role/tabIndex 而不是嵌套 button。 */
+function rowHandlers(onActivate: () => void) {
+  return {
+    role: 'button',
+    tabIndex: 0,
+    onClick: onActivate,
+    onKeyDown: (event: { key: string, preventDefault: () => void }) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        onActivate()
+      }
+    },
+  }
 }
 
-/** 一行 PR。简洁=单行 28px（扫描用）；详细=两行（标题 + 作者/标签/评论/时间）。 */
-function Row(props: { row: PrRow; density: Density; selected: boolean; onSelect: (row: PrRow) => void }) {
-  const { row, density } = props
-  const open = (event: { stopPropagation: () => void }) => {
-    event.stopPropagation()
-    window.open(row.url, '_blank', 'noopener,noreferrer')
-  }
+function OpenExternal(props: { url: string, label: string }) {
+  return createElement(Button, {
+    variant: 'ghost', size: 'sm',
+    icon: createElement(IconLinkOutlineRegular, {}),
+    'aria-label': props.label, title: props.label,
+    onClick: (event: ReactMouseEvent) => {
+      event.stopPropagation()
+      window.open(props.url, '_blank', 'noopener,noreferrer')
+    },
+  })
+}
+
+/** 一行 PR。简洁=单行 28px（扫描用）；详细=两行（标题 + 作者/标签/评论/合并时间）。 */
+function Row(props: { row: PrRow, density: Density, selected: boolean, onSelect: (row: PrRow) => void, i18n: I18n }) {
+  const { row, density, i18n } = props
+  const { t, tf } = i18n
   const num = createElement('span', { key: 'n', className: 'pi-num' }, `#${row.number}`)
   const subject = createElement('span', { key: 't', className: 'pi-subject', title: row.title }, row.title)
-  const external = createElement(IconButton, {
-    key: 'x', icon: createElement(ExternalIcon, {}), label: L.openOnGitHub, onClick: () => { open({ stopPropagation: () => {} }) },
-  })
+  const external = createElement(OpenExternal, { key: 'x', url: row.url, label: t('openOnGitHub') })
+  const handlers = rowHandlers(() => { props.onSelect(row) })
   if (density === 'compact') {
     return createElement('div', {
-      className: 'pi-row', 'data-density': 'compact', 'data-pr-row': String(row.number),
+      ...handlers,
+      className: 'pi-row',
+      'data-density': 'compact',
+      'data-pr-row': String(row.number),
       'data-selected': props.selected ? 'true' : undefined,
-      onClick: () => { props.onSelect(row) },
       title: `${row.author} · ${formatAge(row.updatedAt)}`,
     }, [
       num, subject,
-      row.isDraft ? createElement('span', { key: 'd', className: 'pi-pill', 'data-tone': 'draft' }, L.draft) : null,
+      row.isDraft ? createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')) : null,
       external,
       createElement('span', { key: 'm', className: 'pi-meta' }, `${row.author} · ${formatAge(row.updatedAt)}`),
     ])
   }
-  const pills: ReactNode[] = [
-    createElement('span', { key: 'a', className: 'pi-pill', 'data-tone': 'author' }, row.author),
-  ]
-  if (row.isDraft) pills.push(createElement('span', { key: 'd', className: 'pi-pill', 'data-tone': 'draft' }, L.draft))
+  const pills: ReactNode[] = [createElement(Tag, { key: 'a', tone: 'quiet' }, row.author)]
   if (row.mergedAt !== undefined) {
-    pills.push(createElement('span', { key: 'm', className: 'pi-pill', 'data-tone': 'merged' }, `${L.mergedAt} ${formatAge(row.mergedAt)}`))
+    pills.push(createElement(Tag, { key: 'm', tone: 'info' }, `${t('mergedAt')} ${formatAge(row.mergedAt)}`))
   }
   for (const label of row.labels.slice(0, 4)) {
-    pills.push(createElement('span', { key: `l:${label}`, className: 'pi-pill', title: label }, label))
+    pills.push(createElement(Tag, { key: `l:${label}`, tone: 'neutral' }, label))
   }
   if (row.labels.length > 4) {
-    pills.push(createElement('span', { key: 'l+', className: 'pi-pill', 'data-tone': 'quiet' }, `+${row.labels.length - 4}`))
+    pills.push(createElement(Tag, { key: 'l+', tone: 'quiet' }, `+${row.labels.length - 4}`))
   }
   if (row.comments > 0) {
-    pills.push(createElement('span', { key: 'c', className: 'pi-pill', 'data-tone': 'quiet', title: L.comments }, `${row.comments} ${L.comments}`))
+    pills.push(createElement(Tag, { key: 'c', tone: 'quiet' }, tf('commentsCount', { count: row.comments })))
   }
   return createElement('div', {
-    className: 'pi-row', 'data-density': 'detailed', 'data-pr-row': String(row.number),
+    ...handlers,
+    className: 'pi-row',
+    'data-density': 'detailed',
+    'data-pr-row': String(row.number),
     'data-selected': props.selected ? 'true' : undefined,
-    onClick: () => { props.onSelect(row) },
   }, [
-    createElement('div', { key: 'l1', className: 'pi-line1' }, [num, subject, external, createElement('span', { key: 'm', className: 'pi-meta' }, formatAge(row.updatedAt))]),
+    createElement('div', { key: 'l1', className: 'pi-line1' }, [
+      num, subject,
+      row.isDraft ? createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')) : null,
+      external,
+      createElement('span', { key: 'm', className: 'pi-meta' }, formatAge(row.updatedAt)),
+    ]),
     createElement('div', { key: 'l2', className: 'pi-line2' }, pills),
   ])
 }
@@ -125,49 +148,49 @@ function Section(props: {
   onToggle: () => void
   selected: number | undefined
   onSelect: (row: PrRow) => void
+  i18n: I18n
 }) {
-  const { bucket, value, query } = props
+  const { bucket, value, query, i18n } = props
+  const { t, tf } = i18n
   const rows = useMemo(() => (value?.rows ?? []).filter(row => matchesQuery(row, query)), [value, query])
   const total = value?.total ?? 0
   const filtered = query.trim() !== ''
-  const count = filtered ? L.hits(rows.length, total) : String(total)
+  const count = filtered ? tf('hits', { hit: rows.length, total }) : String(total)
   const body: ReactNode[] = []
   if (value?.error !== undefined) {
     body.push(createElement('div', { key: 'e', className: 'pi-notice', 'data-tone': 'error' }, value.error.message))
   } else if (rows.length === 0) {
-    body.push(createElement('div', { key: 'z', className: 'pi-empty' }, filtered ? L.noMatch : L.bucketEmpty))
+    body.push(createElement('div', { key: 'z', className: 'pi-empty' }, filtered ? t('noMatch') : t('bucketEmpty')))
   }
   for (const row of rows) {
     body.push(createElement(Row, {
-      key: row.number, row, density: props.density, selected: props.selected === row.number, onSelect: props.onSelect,
+      key: row.number, row, density: props.density, selected: props.selected === row.number, onSelect: props.onSelect, i18n,
     }))
   }
   return createElement('section', { className: 'pi-section', 'data-bucket': bucket, 'data-open': props.open ? 'true' : 'false' }, [
     createElement('button', {
-      key: 'h', type: 'button', className: 'pi-sectionHeader', onClick: props.onToggle,
-      'aria-expanded': props.open,
+      key: 'h', type: 'button', className: 'pi-sectionHeader', onClick: props.onToggle, 'aria-expanded': props.open,
     }, [
-      createElement('span', { key: 'c', className: 'pi-chevron' }, createElement(ChevronIcon, {})),
-      createElement('span', { key: 'l', className: 'pi-sectionLabel' }, L.bucket[bucket] ?? bucket),
+      createElement('span', { key: 'c', className: 'pi-chevron' }, createElement(IconChevronDownOutlineRegular, { size: 14 })),
+      createElement('span', { key: 'l', className: 'pi-sectionLabel' }, t(BUCKET_LABEL[bucket])),
       createElement('span', { key: 'n', className: 'pi-sectionCount' }, count),
-      createElement('span', { key: 'q', className: 'pi-sectionCount' }, L.bucketHint[bucket] ?? ''),
+      createElement('span', { key: 'q', className: 'pi-hint' }, t(BUCKET_HINT[bucket])),
     ]),
     createElement('div', { key: 'b', className: 'pi-rows' }, body),
   ])
 }
 
-export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
+export function Panel({ ctx, i18n, sessionId, cwd, visible }: PanelProps) {
+  const { t } = i18n
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
   const [query, setQuery] = useState('')
   const [density, setDensity] = useState<Density>('compact')
   const [collapsed, setCollapsed] = useState<Partial<Record<BucketKey, boolean>>>({})
   const [selected, setSelected] = useState<number | undefined>(undefined)
-  /** 打开的详情（undefined = 还在列表）。 */
   const [open, setOpen] = useState<number | undefined>(undefined)
-  const [detail, setDetail] = useState<{ loading: boolean; value?: PrDetailValue; error?: string }>({ loading: false })
+  const [detail, setDetail] = useState<{ loading: boolean, value?: PrDetailValue, error?: string }>({ loading: false })
   const generation = useRef(0)
   const detailGeneration = useRef(0)
-  /** 会话权威 cwd：拿到一次就复用（列表与详情共用）。 */
   const cwdRef = useRef<string | undefined>(undefined)
 
   const ensureCwd = useCallback(async (): Promise<string | undefined> => {
@@ -184,7 +207,7 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
     try {
       const resolved = await ensureCwd()
       if (resolved === undefined) {
-        if (mine === generation.current) setState({ phase: 'failed', message: '会话还没有工作目录', code: 'no-cwd' })
+        if (mine === generation.current) setState({ phase: 'failed', message: t('unbound'), code: 'no-cwd' })
         return
       }
       const value = await callOp<ListValue>(ctx, 'list', { cwd: resolved })
@@ -195,9 +218,8 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
       const code = error instanceof RouteError ? error.code : undefined
       setState({ phase: 'failed', message, ...(code === undefined ? {} : { code }) })
     }
-  }, [ctx, ensureCwd])
+  }, [ctx, ensureCwd, t])
 
-  /** 打开一个 PR 的详情（host 侧 30 s 有界缓存，重复点开不打 API）。 */
   const loadDetail = useCallback(async (number: number): Promise<void> => {
     const mine = detailGeneration.current + 1
     detailGeneration.current = mine
@@ -205,7 +227,7 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
     try {
       const resolved = await ensureCwd()
       if (resolved === undefined) {
-        if (mine === detailGeneration.current) setDetail({ loading: false, error: '会话还没有工作目录' })
+        if (mine === detailGeneration.current) setDetail({ loading: false, error: t('unbound') })
         return
       }
       const value = await callOp<PrDetailValue>(ctx, 'detail', { cwd: resolved, number })
@@ -214,24 +236,12 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
       if (mine !== detailGeneration.current) return
       setDetail({ loading: false, error: error instanceof Error ? error.message : String(error) })
     }
-  }, [ctx, ensureCwd])
+  }, [ctx, ensureCwd, t])
 
   const openRow = useCallback((row: PrRow): void => {
     setSelected(row.number)
     setOpen(row.number)
   }, [])
-
-  // 可见性门控：隐藏时什么都不做，重新可见立刻补一次（不持定时器）。
-  useEffect(() => {
-    if (!visible) return
-    void load()
-  }, [visible, load])
-
-  // 详情同理：打开的 PR 只在可见时取，重新可见补一次（host 侧 30 s 缓存兜住重复）。
-  useEffect(() => {
-    if (!visible || open === undefined) return
-    void loadDetail(open)
-  }, [visible, open, loadDetail])
 
   const back = useCallback((): void => {
     detailGeneration.current += 1
@@ -239,37 +249,55 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
     setDetail({ loading: false })
   }, [])
 
-  const ready = state.phase === 'ready' ? state.value : undefined
-  const gh = ready?.gh
-  const repo = ready?.repo ?? undefined
+  useEffect(() => {
+    if (!visible) return
+    void load()
+  }, [visible, load])
 
-  // 详情视图：面板整体换成 PR 内容（列表状态保留，返回即原位）。
+  useEffect(() => {
+    if (!visible || open === undefined) return
+    void loadDetail(open)
+  }, [visible, open, loadDetail])
+
   if (open !== undefined) {
     return createElement('div', { className: 'pi-root', 'data-dsh-pr-inbox-panel': '', 'data-pi-view': 'detail' },
       createElement(Detail, {
         detail: detail.value,
         loading: detail.loading,
         error: detail.error,
+        i18n,
         onBack: back,
         onRefresh: () => { void loadDetail(open) },
       }))
   }
 
   const head = createElement('div', { className: 'pi-head' }, [
-    createElement('input', {
-      key: 's', className: 'pi-search', 'data-pi-search': '', type: 'search',
-      placeholder: L.search, value: query, spellCheck: false,
-      onChange: (event: { target: { value: string } }) => { setQuery(event.target.value) },
-    }),
-    createElement('div', { key: 'd', className: 'pi-switch' }, (['compact', 'detailed'] as const).map(mode =>
-      createElement('button', {
-        key: mode, type: 'button', className: 'pi-chip', 'data-pi-density': mode,
-        'data-active': density === mode ? 'true' : undefined,
-        onClick: () => { setDensity(mode) },
-      }, mode === 'compact' ? L.compact : L.detailed))),
-    createElement(IconButton, {
-      key: 'r', icon: createElement(RefreshIcon, {}), label: L.refresh,
-      disabled: !visible, spinning: state.phase === 'loading', onClick: () => { void load() },
+    createElement('span', { key: 's', className: 'pi-search' },
+      createElement(Input, {
+        icon: createElement(IconSearchOutlineRegular, {}),
+        placeholder: t('searchPlaceholder'),
+        'aria-label': t('searchPlaceholder'),
+        'data-pi-search': '',
+        value: query,
+        spellCheck: false,
+        onChange: (event: { target: { value: string } }) => { setQuery(event.target.value) },
+      })),
+    createElement('span', { key: 'd', className: 'pi-density' }, [
+      createElement(Pill, {
+        key: 'c', active: density === 'compact', 'data-pi-density': 'compact',
+        onClick: () => { setDensity('compact') },
+      }, t('compact')),
+      createElement(Pill, {
+        key: 'x', active: density === 'detailed', 'data-pi-density': 'detailed',
+        onClick: () => { setDensity('detailed') },
+      }, t('detailed')),
+    ]),
+    createElement(Button, {
+      key: 'r', variant: 'toolbar', size: 'sm',
+      icon: createElement(IconRefreshOutlineRegular, {}),
+      'aria-label': t('refresh'), title: t('refresh'),
+      disabled: !visible,
+      onClick: () => { void load() },
     }),
   ])
 
@@ -279,24 +307,24 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
     const hint = state.code === undefined ? undefined : GH_HINT[state.code]
     if (hint !== undefined) body.push(createElement('div', { key: 'h', className: 'pi-notice' }, hint))
   } else if (state.phase === 'loading') {
-    body.push(createElement('div', { key: 'l', className: 'pi-empty' }, L.reading))
+    body.push(createElement('div', { key: 'l', className: 'pi-empty' }, t('reading')))
   } else {
     const value = state.value
     if (value.gh.available !== true) {
-      body.push(createElement('div', { key: 'g', className: 'pi-notice', 'data-tone': 'error' }, value.gh.error ?? 'gh 不可用'))
+      body.push(createElement('div', { key: 'g', className: 'pi-notice', 'data-tone': 'error' }, value.gh.error ?? 'gh'))
       body.push(createElement('div', { key: 'gh', className: 'pi-notice' }, GH_HINT['gh-missing']!))
     } else if (value.gh.login === undefined) {
-      body.push(createElement('div', { key: 'g', className: 'pi-notice', 'data-tone': 'error' }, value.gh.error ?? 'gh 未登录'))
+      body.push(createElement('div', { key: 'g', className: 'pi-notice', 'data-tone': 'error' }, value.gh.error ?? 'gh'))
       body.push(createElement('div', { key: 'h', className: 'pi-notice' }, GH_HINT['gh-unauthenticated']!))
     }
     if (value.repo === null) {
-      body.push(createElement('div', { key: 'r', className: 'pi-notice', 'data-tone': 'warn' }, L.unbound))
+      body.push(createElement('div', { key: 'r', className: 'pi-notice', 'data-tone': 'warn' }, t('unbound')))
     } else if (value.note !== undefined) {
       body.push(createElement('div', { key: 'n', className: 'pi-notice', 'data-tone': 'warn' }, value.note))
     }
     for (const bucket of BUCKETS) {
       body.push(createElement(Section, {
-        key: bucket, bucket, value: value.buckets[bucket], query, density,
+        key: bucket, bucket, value: value.buckets[bucket], query, density, i18n,
         open: collapsed[bucket] !== true,
         onToggle: () => { setCollapsed(previous => ({ ...previous, [bucket]: previous[bucket] !== true })) },
         selected, onSelect: openRow,
@@ -304,11 +332,14 @@ export function Panel({ ctx, sessionId, cwd, visible }: PanelProps) {
     }
   }
 
+  const ready = state.phase === 'ready' ? state.value : undefined
   const foot = createElement('div', { className: 'pi-foot', 'data-pi-foot': '' }, [
-    createElement('span', { key: 'r', className: 'pi-footRepo' }, repo?.fullName ?? L.unboundShort),
+    createElement('span', { key: 'r', className: 'pi-footRepo' }, ready?.repo?.fullName ?? t('unboundShort')),
     createElement('span', { key: 'm', className: 'pi-footMeta' },
-      [gh?.login === undefined ? '' : `@${gh.login}`, ready === undefined ? '' : `${L.updated} ${formatAge(ready.fetchedAt)}`]
-        .filter(part => part !== '').join(' · ')),
+      [
+        ready?.gh.login === undefined ? '' : `@${ready.gh.login}`,
+        ready === undefined ? '' : `${t('updated')} ${formatAge(ready.fetchedAt)}`,
+      ].filter(part => part !== '').join(' · ')),
   ])
 
   return createElement('div', { className: 'pi-root', 'data-dsh-pr-inbox-panel': '' },

@@ -164,7 +164,7 @@ console.log(`· 详情 #969：正文 ${bodyLength} 字符、文件行 ${detailFi
 if (detailFiles === 0) fail('详情没有渲染出文件清单')
 if (bodyLength === 0) fail('详情没有渲染出正文')
 await shoot('pr-inbox-detail')
-await page.locator('[data-dsh-pr-inbox-detail] button.pi-iconButton').first().click()
+await page.locator('[data-pi-back]').first().click()
 await page.locator('[data-bucket="authored"]').waitFor({ timeout: 15_000 })
 step('详情打开 + 返回列表生效')
 
