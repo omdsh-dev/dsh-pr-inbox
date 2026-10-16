@@ -3,3 +3,6 @@ node_modules/
 coverage/
 test-results/
 .DS_Store
+
+# 本机作业笔记（第 3 层知识）不进仓库
+AGENTS.local.md
