@@ -26,3 +26,39 @@ export interface StatusValue {
   gh: GhProbeValue
   repo: RepoValue | null
 }
+
+/** 三桶的键。 */
+export type BucketKey = 'authored' | 'review' | 'merged'
+
+/** 列表里的一行 PR（只带渲染简洁/详细两种密度所需的最小字段集）。 */
+export interface PrRow {
+  number: number
+  title: string
+  url: string
+  author: string
+  isDraft: boolean
+  state: string
+  createdAt: string
+  updatedAt: string
+  /** 已合并时间；未合并为 undefined。 */
+  mergedAt?: string
+  labels: string[]
+  comments: number
+}
+
+/** 一个桶：命中总数 + 这一页的行；失败时带 per-bucket 错误（其它桶照常显示）。 */
+export interface BucketValue {
+  total: number
+  rows: PrRow[]
+  error?: { code?: string; message: string }
+}
+
+export interface ListValue {
+  repo: RepoValue | null
+  gh: GhProbeValue
+  /** 这一份列表的取数时间（ISO）。 */
+  fetchedAt: string
+  buckets: Record<BucketKey, BucketValue>
+  /** 服务端提示（例如非 github.com 的 host 暂不支持）——非致命。 */
+  note?: string
+}
