@@ -1,0 +1,49 @@
+name: CI
+
+# 这个仓库还没建远端；工作流先就位，等仓库挂到 GitHub 上即可生效。
+# 与 better-sidebar 的教训一致：**钉精确 Node 版本、不依赖开发机才有的二进制**，
+# 真实 gh 的冒烟用例（PR_INBOX_LIVE）默认跳过，因此 CI 不需要任何凭据。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      # lib/ 随提交入库（github: 源安装免构建），所以构建必须是确定性的：
+      # 源码与产物不一致时这里直接红，而不是等使用者装到一个旧产物。
+      - name: Built output matches the committed lib/
+        run: git diff --exit-code -- lib
+
+      - name: Packed tarball contents
+        run: |
+          pnpm pack --pack-destination /tmp
+          tar -tzf /tmp/dsh-pr-inbox-*.tgz | sort
+          tar -tzf /tmp/dsh-pr-inbox-*.tgz | grep -qx 'package/lib/client.js'
+          tar -tzf /tmp/dsh-pr-inbox-*.tgz | grep -qx 'package/lib/index.js'
+          tar -tzf /tmp/dsh-pr-inbox-*.tgz | grep -qx 'package/cordis.patch.yml'
