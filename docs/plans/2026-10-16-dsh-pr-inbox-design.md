@@ -59,6 +59,8 @@
 4. `Recently merged` 是**最近 20 条**，不是时间窗。
 5. better-sidebar 缺席时：host 半照常加载，client 半因 `inject: ['betterSidebar']`
    保持未激活——不会崩，也不会有入口（这是 `optional peer` 的预期形态）。
+   **已实测**（`scripts/verify-standalone.mjs`，只装本插件的隔离 profile）：
+   自有路由仍回 200 且绑定可用、页面上没有 `[data-dsh-better-sidebar]`、零 pageerror。
 
 ## 6. 验证矩阵
 
@@ -68,10 +70,14 @@
 | 单测 | `pnpm test` | 69 条：remote 解析 / gh 错误分类 / 三桶契约 / 详情归一化与降级 / 发布门 |
 | 真实 gh（可选） | `PR_INBOX_LIVE=1 pnpm test` | 真数据：三桶 + 详情（默认跳过，不进 CI） |
 | 隔离实例两层门 | `bash scripts/verify-host.sh <workspace> <owner/repo>` | ① 自有路由三 op（含入参围栏）② 浏览器级：原生右栏条目→三桶→密度→搜索→详情→返回 |
+| 独立形态（better-sidebar 缺席） | `node scripts/verify-standalone.mjs <url> <cwd>` | host 路由仍应答 + 绑定可用；client 半安全未激活、页面零报错 |
 | 发布物 | `pnpm pack` + `tests/package.spec.ts` | tarball 只含 `lib/*` + patch + README + LICENSE + package.json |
 
-实测（2026-10-16，gh 2.96.0 / DSH 0.2.0-rc.2 线）：`authored` 2 条（含 #969）·
+实测（2026-10-16，**DSH 0.2.0-rc.2** / gh 2.96.0）：`authored` 2 条（含 #969）·
 `review` 0 · `merged` total=276 取 20；详情 #969 正文 2804 字符 / 42 文件 / 时间线 1。
+错误路径不是靠合成字符串：`tests/gh-errors.spec.ts` 真起进程验证了
+gh 缺失（ENOENT→501）、空 config dir 未登录（gh 真实退出码 4→401）、
+以及挂住的 gh 被超时杀掉（→504，实测 0.4 s 返回）。
 
 ## 7. 发布与分批
 

@@ -196,6 +196,37 @@ describe('listOp', () => {
     expect(mocks.ghJson).toHaveBeenCalledTimes(4)
   })
 
+  // ── 缓存的两条语义：跨会话共享（单例）与上界淘汰（有界）──────────────────────
+  it('shares one cache across callers: the key is the repository, not the cwd', async () => {
+    routeGhJson()
+    await listOp({ cwd: '/w/session-a/repo' })
+    await listOp({ cwd: '/w/session-b/checkout' })
+    // 两个 cwd → 同一个 owner/repo：第二次一条查询都不该再发。
+    expect(mocks.ghJson).toHaveBeenCalledTimes(3)
+  })
+
+  it('evicts the oldest entries once the table is full (bounded cache)', async () => {
+    routeGhJson()
+    const repos = Array.from({ length: 5 }, (_, index) => ({
+      ...REPO, owner: `owner${index}`, name: 'repo', fullName: `owner${index}/repo`,
+    }))
+    for (const repo of repos) {
+      mocks.detectRepo.mockResolvedValue(repo)
+      await listOp({ cwd: `/w/${repo.owner}` })
+    }
+    // 5 仓库 × 3 桶 = 15 条 > CACHE_MAX(12)：最旧的 3 条（第一个仓库）已被淘汰。
+    expect(mocks.ghJson).toHaveBeenCalledTimes(15)
+
+    mocks.detectRepo.mockResolvedValue(repos[0]!)
+    await listOp({ cwd: '/w/owner0' })
+    expect(mocks.ghJson).toHaveBeenCalledTimes(18)
+
+    // 最近用过的那个仍在缓存里：不再多发查询。
+    mocks.detectRepo.mockResolvedValue(repos[4]!)
+    await listOp({ cwd: '/w/owner4' })
+    expect(mocks.ghJson).toHaveBeenCalledTimes(18)
+  })
+
   it('does not query anything for a workspace without a forge remote', async () => {
     mocks.detectRepo.mockResolvedValue(undefined)
     const value = await listOp({ cwd: '/w/plain' })
