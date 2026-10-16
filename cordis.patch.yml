@@ -1,0 +1,5 @@
+# dsh-pr-inbox bundle：只挂 Node half（gh 读取 + 自有 /plugins/dsh-pr-inbox/* 路由）。
+# UI 走 dsh.client（浏览器侧加载 lib/client.js，注册 better-sidebar tab）。
+- insert:
+    - id: pr-inbox
+      name: 'dsh-pr-inbox'
