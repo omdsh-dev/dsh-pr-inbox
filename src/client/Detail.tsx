@@ -73,7 +73,7 @@ function Comment({ entry, labels, pathImages, i18n }: { entry: PrDetailComment, 
     head.push(createElement(Tag, { key: 's', tone: REVIEW_TONE[state] ?? 'neutral' }, t(REVIEW_KEY[state] ?? 'reviewCommented')))
   }
   head.push(createElement(Tag, { key: 't', tone: 'quiet' }, formatAge(entry.createdAt)))
-  return createElement('div', { className: 'pi-comment', 'data-pi-comment': entry.kind }, [
+  return createElement('div', { className: 'pi-card pi-comment', 'data-pi-comment': entry.kind }, [
     createElement('div', { key: 'h', className: 'pi-commentHead' }, head),
     createElement(MarkdownText, {
       key: 'b',
@@ -187,7 +187,7 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
     for (const warning of detail.warnings) {
       body.push(createElement('div', { key: `w:${warning}`, className: 'pi-notice', 'data-tone': 'warn' }, warning))
     }
-    body.push(createElement('div', { key: 'prose', 'data-pi-body': '' },
+    body.push(createElement('div', { key: 'prose', className: 'pi-card', 'data-pi-body': '' },
       createElement(MarkdownText, {
         text: detail.body === '' ? t('emptyBody') : detail.body,
         labels,
@@ -201,12 +201,11 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
       t('timeline'),
       createElement('span', { key: 'n', className: 'pi-sectionCount' }, String(detail.timeline.length)),
     ]))
-    if (detail.timeline.length === 0) {
-      body.push(createElement('div', { key: 'te', className: 'pi-empty' }, t('noTimeline')))
-    }
-    for (const [index, entry] of detail.timeline.entries()) {
-      body.push(createElement(Comment, { key: `${entry.kind}:${entry.createdAt}:${index}`, entry, labels, pathImages, i18n }))
-    }
+    const comments = detail.timeline.map((entry, index) => createElement(Comment, {
+      key: `${entry.kind}:${entry.createdAt}:${index}`, entry, labels, pathImages, i18n,
+    }))
+    body.push(createElement('div', { key: 'tl', className: 'pi-stack' },
+      comments.length === 0 ? [createElement('div', { key: 'te', className: 'pi-empty' }, t('noTimeline'))] : comments))
     if (detail.timelineTruncated) {
       body.push(createElement('div', { key: 'tt', className: 'pi-notice', 'data-tone': 'warn' }, t('timelineTruncated')))
     }
@@ -214,7 +213,8 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
       t('filesTitle'),
       createElement('span', { key: 'n', className: 'pi-sectionCount' }, String(detail.changedFiles)),
     ]))
-    for (const file of detail.files) body.push(createElement(FileRow, { key: file.path, file, i18n }))
+    body.push(createElement('div', { key: 'fl', className: 'pi-card', 'data-flush': 'true' },
+      detail.files.map(file => createElement(FileRow, { key: file.path, file, i18n }))))
     if (detail.filesTruncated) {
       body.push(createElement('div', { key: 'ft', className: 'pi-notice', 'data-tone': 'warn' }, t('filesTruncated')))
     }

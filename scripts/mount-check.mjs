@@ -181,6 +181,45 @@ for (let attempt = 0; attempt < 120; attempt++) {
   if (detailFiles > 0) break
   await page.waitForTimeout(500)
 }
+// 边界关系（可验证的几何证据）：正文必须是一个**独立的填充块**——
+// 它的背景色与面板底的背景色不同，且圆角非 0（官方：流内内容靠填充差 + 圆角分块，
+// 不靠描边/阴影）。只看「有没有这个节点」证明不了分层。
+const boundary = await page.evaluate(() => {
+  const card = document.querySelector('[data-pi-body]')
+  const root = document.querySelector('[data-dsh-pr-inbox-panel]')
+  if (card === null || root === null) return null
+  const cardStyle = getComputedStyle(card)
+  // 真正的对照面是**宿主面板底**，不是我自己的 root（它可以是透明的）：
+  // 往上找第一个不透明背景的祖先，卡片的填充必须与它不同，否则分块根本看不见。
+  let pane = root.parentElement
+  let paneFill = 'rgba(0, 0, 0, 0)'
+  while (pane !== null) {
+    const fill = getComputedStyle(pane).backgroundColor
+    if (fill !== 'rgba(0, 0, 0, 0)' && fill !== 'transparent') { paneFill = fill; break }
+    pane = pane.parentElement
+  }
+  const rootStyle = { backgroundColor: paneFill }
+  const cards = [...document.querySelectorAll('.pi-card')]
+  return {
+    cardFill: cardStyle.backgroundColor,
+    panelFill: rootStyle.backgroundColor,
+    cardRadius: Number.parseFloat(cardStyle.borderTopLeftRadius),
+    cardBorderWidth: Number.parseFloat(cardStyle.borderTopWidth),
+    cardBorderColor: cardStyle.borderTopColor,
+    cardCount: cards.length,
+    distinctFills: new Set(cards.map(node => getComputedStyle(node).backgroundColor)).size,
+  }
+})
+const fillDiffers = boundary !== null && boundary.cardFill !== boundary.panelFill
+const hairline = boundary !== null && boundary.cardBorderWidth > 0
+  && !boundary.cardBorderColor.startsWith('rgba(0, 0, 0, 0)')
+console.log(`· 分层：卡片 ${boundary?.cardCount} 个 · 圆角 ${boundary?.cardRadius}px · 填充 ${boundary?.cardFill} vs 面板底 ${boundary?.panelFill} · 发丝线 ${boundary?.cardBorderWidth}px/${boundary?.cardBorderColor}`)
+if (boundary === null) fail('找不到正文卡片或面板根，无法验证分层')
+// 边界判据必须主题无关：浅色主题下宿主各层都是 #fff，填充差恒为 0；
+// 那种情况下唯一可见的边界是 0.5px 中性发丝线。
+if (!fillDiffers && !hairline) fail('正文块与面板底既无填充差也无发丝边界：分块不可见')
+if (!(boundary.cardRadius > 0)) fail('正文卡片没有圆角：分块几何没生效')
+if (boundary.cardCount < 2) fail('详情里只看到 1 张卡（正文/评论/文件清单应各自成块）')
 const bodyLength = ((await page.locator('[data-pi-body]').first().innerText()) ?? '').length
 const commentCount = await page.locator('[data-pi-comment]').count()
 console.log(`· 详情 #969：正文 ${bodyLength} 字符、文件行 ${detailFiles}、时间线 ${commentCount}`)

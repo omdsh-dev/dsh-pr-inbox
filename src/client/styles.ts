@@ -185,7 +185,28 @@ const CSS = `
   line-height: 1;
   overflow: hidden;
 }
-.pi-detailBody { flex: 1; min-height: 0; overflow: auto; padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pi-detailBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* 区分「正文 / 评论 / 文件清单」三块：**0.5px 发丝边界 + 圆角**。
+   为什么不靠填充差：实测 DSH 浅色主题下 bg-base / layer-1 / layer-2 / layer-3
+   **全是 #fff**（grep 主题表与页面实测一致），填充差在浅色下恒为零——只靠它分块
+   就是隐形分块（这一版第一稿正是如此，被挂载门的几何断言当场抓出来）。官方规则里
+   「中性边框与分隔线一律 0.5px」才是流内分组的边界手段；填充留给暗色下的额外分层。 */
+.pi-card {
+  background: var(--dsw-alias-bg-layer-2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  padding: 10px 12px;
+}
+.pi-card[data-flush='true'] { padding: 4px; }
+.pi-stack { display: flex; flex-direction: column; gap: 8px; }
 .pi-detailMeta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .pi-detailStats {
   display: flex;
@@ -204,20 +225,22 @@ const CSS = `
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+  height: 30px;
+  margin-top: 2px;
+  padding: 0 2px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);
-  font: var(--dsw-font-xxs-strong-12);
+  font: var(--dsw-font-xs-strong-13);
 }
-.pi-comment { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 0.5px solid var(--dsw-alias-border-l1); }
+.pi-comment { display: flex; flex-direction: column; gap: 6px; }
 .pi-commentHead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .pi-file {
   box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
-  padding: 0 4px;
+  height: 26px;
+  padding: 0 8px;
   border-radius: var(--dsw-radius-sm);
 }
 .pi-file:hover { background: var(--dsw-alias-interactive-bg-hover); }
