@@ -2,7 +2,7 @@
  * 门禁：no-machine-paths —— 发布卫生。
  *
  * 入库文本里不得出现**本机绝对路径**与**凭据**。理由很实际：从历史里清凭据比发之前
- * 扫一遍贵得多，而本机路径会让外人 clone 下来直接跑不通（"为什么脚本指向 /Users/vlln"）。
+ * 扫一遍贵得多，而本机路径会让外人 clone 下来直接跑不通（"为什么脚本指向某个开发机的家目录"）。
  * 规则来源：make-dsh-plugin `references/dev-conventions.md`「门禁」的 `no-machine-paths`。
  *
  * 扫的是**入库内容**（git ls-files）；`scripts/gates/` 自身排除——它必然含这些模式的

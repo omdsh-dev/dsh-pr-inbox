@@ -10,7 +10,8 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
-SCRATCH=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates/mounted}
+BASE=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates}
+SCRATCH="$BASE/mounted"
 HOME_DIR="$SCRATCH/home"
 WORKSPACE=${1:?用法: scripts/gates/mounted.sh <workspace 路径> [期望的 owner/repo]——需要一个已绑定的 git 仓库路径}
 EXPECT_REPO=${2:-}

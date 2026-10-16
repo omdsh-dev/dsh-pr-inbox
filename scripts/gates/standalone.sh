@@ -10,7 +10,8 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
-SCRATCH=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates/standalone}
+BASE=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates}
+SCRATCH="$BASE/standalone"
 HOME_DIR="$SCRATCH/home"
 WORKSPACE=${1:?用法: scripts/gates/standalone.sh <workspace 路径>——需要一个已绑定的 git 仓库路径}
 PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-$SCRATCH/browsers}

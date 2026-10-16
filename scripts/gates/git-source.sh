@@ -13,7 +13,8 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
-SCRATCH=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates/git-source}
+BASE=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates}
+SCRATCH="$BASE/git-source"
 HOME_DIR="$SCRATCH/home"
 WORKSPACE=${1:?用法: scripts/gates/git-source.sh <workspace 路径>——host-ops 需要一个已绑定的 git 仓库}
 BS_VERSION=${BETTER_SIDEBAR_VERSION:-0.26.1}

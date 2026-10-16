@@ -16,7 +16,8 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
-SCRATCH=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates/negative-control}
+BASE=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates}
+SCRATCH="$BASE/negative-control"
 WORKSPACE=${1:?用法: scripts/gates/negative-control.sh <workspace 路径>}
 BS_VERSION=${BETTER_SIDEBAR_VERSION:-0.26.1}
 export PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-$SCRATCH/browsers}

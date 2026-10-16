@@ -169,7 +169,16 @@ const measureRow = () => page.evaluate(() => {
     const rect = node.getBoundingClientRect()
     return { x: Math.round(rect.left * 10) / 10, y: Math.round(rect.top * 10) / 10, w: Math.round(rect.width * 10) / 10 }
   }
-  const second = document.querySelectorAll('[data-pr-row]')[1]
+  // 行线是 `.pi-row + .pi-row`（相邻兄弟），所以要取**同一个 .pi-rows 容器里**的第二行：
+  // 跨分区取样拿到的是"上一区块的最后一行 + 下一区块的第一行"，它们不是兄弟，
+  // 看不到行线（分区边界另有其线）——这个坑在 authored 只剩 1 行时暴露过一次。
+  const second = (() => {
+    for (const container of document.querySelectorAll('.pi-rows')) {
+      const rows = container.querySelectorAll('[data-pr-row]')
+      if (rows.length >= 2) return rows[1]
+    }
+    return undefined
+  })()
   const external = row.querySelector('.pi-external')
   const heightOf = (selector) => {
     const node = document.querySelector(selector)
