@@ -104,25 +104,52 @@ await entry.click()
 const panel = page.locator('[data-dsh-pr-inbox-panel]')
 await panel.first().waitFor({ timeout: 60_000 })
 
-// 面板先渲染「读取中…」，等它落到终态再取文本（最多 30 s）。
-let text = ''
-for (let attempt = 0; attempt < 60; attempt++) {
-  text = (await panel.first().innerText()).replace(/\s+/g, ' ').trim()
-  if (!text.includes('读取中')) break
+// 等三桶与行数据落下来（gh 三条真实查询要几秒）。
+await page.locator('[data-bucket="authored"]').waitFor({ timeout: 60_000 })
+let rows = 0
+for (let attempt = 0; attempt < 120; attempt++) {
+  rows = await page.locator('[data-pr-row]').count()
+  if (rows > 0) break
   await page.waitForTimeout(500)
 }
-console.log(`· 面板文本：${text}`)
+const perBucket = {}
+for (const key of ['authored', 'review', 'merged']) {
+  perBucket[key] = await page.locator(`[data-bucket="${key}"] [data-pr-row]`).count()
+}
+const text = (await panel.first().innerText()).replace(/\s+/g, ' ').trim()
+console.log(`· 三桶行数：${JSON.stringify(perBucket)}`)
+console.log(`· 面板文本：${text.slice(0, 360)}`)
+if (rows === 0) fail('三桶一行数据都没有（gh 取数或渲染失败）')
 if (expectRepo !== undefined && !text.includes(expectRepo)) fail(`面板里没有出现 ${expectRepo}`)
-if (text.includes('读取中')) fail('面板一直停在读取中')
-if (text.includes('未绑定项目')) fail('面板没绑定到项目')
-if (pageErrors.length > 0) fail(`页面报错：${pageErrors.join(' | ')}`)
+
+// 密度切换：详细 → 行上出现 data-density=detailed；再切回简洁。
 const shotDir = process.env.SCREENSHOT_DIR
-if (shotDir !== undefined) {
+const shoot = async (name) => {
+  if (shotDir === undefined) return
   const { mkdirSync } = await import('node:fs')
   mkdirSync(shotDir, { recursive: true })
-  await page.screenshot({ path: `${shotDir}/pr-inbox-panel.png` })
-  console.log(`· 截图：${shotDir}/pr-inbox-panel.png`)
+  await page.screenshot({ path: `${shotDir}/${name}.png` })
+  console.log(`· 截图：${shotDir}/${name}.png`)
 }
+await shoot('pr-inbox-compact')
+await page.locator('[data-pi-density="detailed"]').click()
+await page.locator('[data-pr-row][data-density="detailed"]').first().waitFor({ timeout: 10_000 })
+step('密度切换生效（详细）')
+await shoot('pr-inbox-detailed')
+await page.locator('[data-pi-density="compact"]').click()
+await page.locator('[data-pr-row][data-density="compact"]').first().waitFor({ timeout: 10_000 })
+
+// 搜索：必然无命中的词让所有行消失，清空后复原（客户端过滤）。
+const search = page.locator('[data-pi-search]')
+await search.fill('zzz-no-such-pr')
+await page.waitForTimeout(300)
+if (await page.locator('[data-pr-row]').count() !== 0) fail('搜索没有过滤掉不匹配的行')
+await search.fill('')
+await page.waitForTimeout(300)
+if (await page.locator('[data-pr-row]').count() === 0) fail('清空搜索后行没有复原')
+step('搜索过滤 + 清空复原生效')
+
+if (pageErrors.length > 0) fail(`页面报错：${pageErrors.join(' | ')}`)
 console.log(`✅ PR 面板已在真实实例里渲染并绑定项目：${expectRepo ?? text.slice(0, 80)}`)
 await browser.close()
 await api.dispose()
