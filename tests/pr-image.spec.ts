@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolvePrImagePath } from '../src/client/pr-image'
 
 const repo = { host: 'github.com', owner: 'omdsh-dev', name: 'DSH-better-sidebar' }
-const cwd = '/Users/vlln/Project/dsh-plugins/DSH-better-sidebar'
+const cwd = '/tmp/repo'
 const ref = 'refs/pull/969/head'
 
 /** 取 query 里的参数（URLSearchParams 会把 `/` 编成 %2F，这里解回来断言语义）。 */

@@ -14,7 +14,7 @@
  * 无头、无 key：消息发送后模型必然失败，但用户消息已入会话 —— 宿主的会话头
  * 因此渲染，原生右栏的入口才存在（与 better-sidebar 挂载 lane 同一手法）。
  */
-import { createRequire } from 'node:module'
+import { loadPlaywright } from './lib/playwright.mjs'
 
 const [launchUrl, workspacePath, expectRepo] = process.argv.slice(2)
 if (launchUrl === undefined || workspacePath === undefined) {
@@ -22,10 +22,7 @@ if (launchUrl === undefined || workspacePath === undefined) {
   process.exit(2)
 }
 
-const require = createRequire(import.meta.url)
-const playwrightPath = process.env.PLAYWRIGHT_MODULE
-  ?? '/Users/vlln/Project/dsh-plugins/DSH-better-sidebar/.worktrees/git-graph/node_modules/@playwright/test'
-const { chromium, request } = require(playwrightPath)
+const { chromium, request } = loadPlaywright().mod
 
 const ORIGIN = new URL(launchUrl).origin
 const HOST_HEADER = new URL(ORIGIN).host

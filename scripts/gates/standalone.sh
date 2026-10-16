@@ -2,18 +2,18 @@
 # 「better-sidebar 缺席」形态门（optional peer 的预期形态，设计文档 §5）：
 # 只装 dsh-pr-inbox 的隔离 profile → host 半照常应答、client 半安全未激活。
 #
-# 用法： scripts/verify-standalone.sh [workspace 路径]
+# 用法： scripts/gates/standalone.sh <workspace 路径>
 # 退出码：0 全通；非 0 表示某一步失败（日志在 $SCRATCH/server.log）。
 #
 # 之所以要有这个包装：脚本本体依赖 Playwright 的浏览器路径，而手敲很容易漏掉
 # `PLAYWRIGHT_BROWSERS_PATH`（漏了会在 chromium.launch 处报一个与插件无关的错）。
 set -uo pipefail
 
-HERE=$(cd "$(dirname "$0")/.." && pwd)
-SCRATCH=${SCRATCH:-$HERE/../.scratch/pr-inbox-standalone}
+HERE=$(cd "$(dirname "$0")/../.." && pwd)
+SCRATCH=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates/standalone}
 HOME_DIR="$SCRATCH/home"
-WORKSPACE=${1:-/Users/vlln/Project/dsh-plugins/DSH-better-sidebar}
-PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/tmp/dsh-git-playwright}
+WORKSPACE=${1:?用法: scripts/gates/standalone.sh <workspace 路径>——需要一个已绑定的 git 仓库路径}
+PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-$SCRATCH/browsers}
 export PLAYWRIGHT_BROWSERS_PATH
 
 rm -rf "$HOME_DIR"
@@ -50,6 +50,6 @@ fi
 echo "实例：$URL"
 
 STATUS=0
-node "$HERE/scripts/verify-standalone.mjs" "$URL" "$WORKSPACE" || STATUS=1
+node "$HERE/scripts/gates/standalone.mjs" "$URL" "$WORKSPACE" || STATUS=1
 kill "$SERVER_PID" 2>/dev/null
 exit "$STATUS"

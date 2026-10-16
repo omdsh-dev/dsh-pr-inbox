@@ -8,7 +8,8 @@ import { detailOp } from '../src/host/detail'
 import { listOp } from '../src/host/prs'
 
 const LIVE = process.env.PR_INBOX_LIVE === '1'
-const WORKSPACE = process.env.PR_INBOX_WORKSPACE ?? '/Users/vlln/Project/dsh-plugins/DSH-better-sidebar'
+// 工作区默认取当前仓库（发布后它自己有 GitHub remote）；要验别的仓库用 PR_INBOX_WORKSPACE。
+const WORKSPACE = process.env.PR_INBOX_WORKSPACE ?? process.cwd()
 
 describe.skipIf(!LIVE)('live gh buckets (PR_INBOX_LIVE=1)', () => {
   it('reads the three buckets for the bound workspace', async () => {

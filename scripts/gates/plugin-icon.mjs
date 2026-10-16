@@ -9,7 +9,7 @@
  * 且 `naturalWidth > 0`（文件存在 / 页面 200 / DOM 里有 img 都不算证明）。
  * 同时落一张截图供**视觉验收**（本 Agent 看不到图像，视觉结论要人看）。
  */
-import { createRequire } from 'node:module'
+import { loadPlaywright } from './lib/playwright.mjs'
 
 const [launchUrl, pkg = 'dsh-pr-inbox'] = process.argv.slice(2)
 if (launchUrl === undefined) {
@@ -17,10 +17,7 @@ if (launchUrl === undefined) {
   process.exit(2)
 }
 
-const require = createRequire(import.meta.url)
-const playwrightPath = process.env.PLAYWRIGHT_MODULE
-  ?? '/Users/vlln/Project/dsh-plugins/DSH-better-sidebar/.worktrees/git-graph/node_modules/@playwright/test'
-const { chromium } = require(playwrightPath)
+const { chromium } = loadPlaywright().mod
 
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })

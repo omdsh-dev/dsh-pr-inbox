@@ -10,7 +10,8 @@
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "dsh": {
     "bundle": {
@@ -28,12 +29,15 @@
     "lib",
     "cordis.patch.yml",
     "icon.svg",
-    "README.md"
+    "locale",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "gates": "node scripts/gates/run.mjs",
     "prepack": "pnpm build"
   },
   "keywords": [
@@ -46,16 +50,6 @@
     "review",
     "sidebar"
   ],
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
-    "dsh-better-sidebar": ">=0.26.0",
-    "react": "^18.2.0"
-  },
-  "peerDependenciesMeta": {
-    "dsh-better-sidebar": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
     "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",

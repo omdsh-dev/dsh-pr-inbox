@@ -1,6 +1,10 @@
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseRemoteUrl, requireAbsoluteCwd } from '../src/host/repo'
 import { PrInboxError } from '../src/host/gh'
+
+/** 跨平台的绝对路径样例：不写任何本机路径（发布卫生门禁会拒）。 */
+const ABS_PATH = path.resolve('/tmp/project')
 
 describe('parseRemoteUrl', () => {
   it('parses the https form with and without the .git suffix', () => {
@@ -37,7 +41,7 @@ describe('parseRemoteUrl', () => {
   })
 
   it('returns undefined for things that are not forge coordinates', () => {
-    for (const raw of ['', '   ', '/Users/vlln/project', 'github.com', 'https://github.com/only-owner', 'not a url']) {
+    for (const raw of ['', '   ', ABS_PATH, 'github.com', 'https://github.com/only-owner', 'not a url']) {
       expect(parseRemoteUrl(raw), raw).toBeUndefined()
     }
   })
@@ -45,7 +49,7 @@ describe('parseRemoteUrl', () => {
 
 describe('requireAbsoluteCwd', () => {
   it('accepts an absolute path and passes it through', () => {
-    expect(requireAbsoluteCwd('/Users/vlln/project')).toBe('/Users/vlln/project')
+    expect(requireAbsoluteCwd(ABS_PATH)).toBe(ABS_PATH)
   })
 
   it('rejects relative paths, empty strings and non-strings as bad-request', () => {

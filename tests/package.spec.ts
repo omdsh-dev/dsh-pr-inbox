@@ -9,7 +9,8 @@
  *  4. `dsh.client` 是 web、且声明了对 better-sidebar bundle 的加载依赖；
  *  5. `files` 覆盖运行时真正要发的那些路径（漏一个 = 装完崩）；
  *  6. 市场硬约束：依赖里不得出现 `cordis` 本体、scripts 不得含安装期钩子；
- *  7. peer 形状：`dsh-better-sidebar` 用下界范围（caret 跨 minor 不成立）；
+ *  7. **依赖三字段不声明官方包**（`@deepseek-ai/*` / `cordis` 由挂载环境注入）；
+ *  8. 包显示元数据：`locale/*.json` 有非空 title/description，且进了 exports 与 files；
  *  8. **构建产物契约**：host bundle 导出 apply/inject；client bundle 是
  *     `__ModuleLoader__` 包装、只 require 宿主模块、**不** value-require
  *     `dsh-better-sidebar`（那会踩 better-sidebar 的构建纯度门）。
@@ -42,12 +43,29 @@ describe('package manifest', () => {
     expect(fileExists('LICENSE')).toBe(true)
   })
 
-  it('declares a lower-bound peer on better-sidebar (a caret range cannot cross minors)', () => {
-    const peers = manifest.peerDependencies as Record<string, string>
-    const meta = manifest.peerDependenciesMeta as Record<string, { optional?: boolean }>
-    expect(peers['dsh-better-sidebar']).toBe('>=0.26.0')
-    expect(meta['dsh-better-sidebar']?.optional).toBe(true)
-    expect(peers['@deepseek-ai/cordis']).toMatch(/^\^4\./)
+  it('declares no official package as a dependency (the mount environment injects them)', () => {
+    // 官方包自带整条 peer 闭包，声明了会让使用者那一步安装 ERESOLVE。
+    // 门禁 package-contract 是权威；这里留一条更快的本地红线。
+    const official = /^(@deepseek-ai\/|cordis$|@cordisjs\/)/
+    for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+      const table = (manifest[field] ?? {}) as Record<string, string>
+      const declared = Object.keys(table).filter(name => official.test(name))
+      expect(declared, `${field} 不得声明官方包`).toEqual([])
+    }
+  })
+
+  it('ships display metadata for the Plugins page (locale/*.json)', () => {
+    const files = manifest.files as string[]
+    const exports = manifest.exports as Record<string, string>
+    expect(exports['./locale/*.json']).toBe('./locale/*.json')
+    expect(files.some(entry => entry.startsWith('locale'))).toBe(true)
+    for (const lang of ['zh', 'en']) {
+      const meta = (readJson(`locale/${lang}.json`) as { meta?: { title?: string, description?: string } }).meta
+      expect(typeof meta?.title, `locale/${lang}.json 缺 meta.title`).toBe('string')
+      expect(meta?.title).not.toBe('')
+      expect(typeof meta?.description, `locale/${lang}.json 缺 meta.description`).toBe('string')
+      expect(meta?.description).not.toBe('')
+    }
   })
 
   it('satisfies the market constraints (no `cordis` dependency, no install hooks)', () => {
@@ -67,7 +85,13 @@ describe('DSH load contract', () => {
     const exports = manifest.exports as Record<string, string>
     for (const [key, target] of Object.entries(exports)) {
       expect(typeof target, `exports["${key}"] must be a string`).toBe('string')
-      expect(fileExists(target), `exports["${key}"] -> ${target} is missing`).toBe(true)
+      if (target.includes('*')) {
+        // 通配导出（`./locale/*.json`）：至少有一个文件真的落在它的形状里。
+        const probe = target.replace(/\*[^/]*$/, 'zh.json')
+        expect(fileExists(probe), `exports["${key}"] -> ${target} 没有任何文件命中（试了 ${probe}）`).toBe(true)
+      } else {
+        expect(fileExists(target), `exports["${key}"] -> ${target} is missing`).toBe(true)
+      }
     }
     // `main` 与 `exports['.']` 指向同一个文件即可（前者惯例不带 `./`）。
     const strip = (path: string): string => path.replace(/^\.\//, '')

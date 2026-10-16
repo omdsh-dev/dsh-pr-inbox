@@ -12,7 +12,7 @@
  * 会回空体 405 且不带 Set-Cookie（better-sidebar AGENTS §3.3 第 13 条实测），
  * 所以不能用全局 fetch。
  */
-import { createRequire } from 'node:module'
+import { loadPlaywright } from './lib/playwright.mjs'
 import { resolve } from 'node:path'
 
 const [launchUrl, cwd] = process.argv.slice(2)
@@ -22,9 +22,7 @@ if (launchUrl === undefined || cwd === undefined) {
 }
 
 /** better-sidebar 的 worktree 里装着 Playwright（本机唯一一份 chromium）。 */
-const require = createRequire(import.meta.url)
-const playwrightPath = process.env.PLAYWRIGHT_MODULE ?? '/Users/vlln/Project/dsh-plugins/DSH-better-sidebar/.worktrees/git-graph/node_modules/@playwright/test'
-const { request } = require(playwrightPath)
+const { request } = loadPlaywright().mod
 
 const VERBOSE = process.env.PR_INBOX_VERBOSE === '1'
 const api = await request.newContext({ maxRedirects: 0 })
