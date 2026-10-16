@@ -4,12 +4,18 @@
 > [engineering-notes.md](engineering-notes.md)），剩下的只有**几个人类决定**和按下按钮。
 > 本文件只写"决定 → 命令"，不含需要重新调查的内容。
 
-## 0. 待拍板（其余都已就绪）
+## 0. 状态与待拍板
+
+**已定（2026-10-16）**：**先不发布**。仓库留在本地；将来发布时按 **public** 走。
+发布前在 README 里把"尚未发布"那段（`## 安装` 里的 tarball 前提）改成 git 源即可——
+两条命令都已实测（见 §1）。
+
+以下四项是发布当天要拍板的（其余都已就绪）：
 
 - [ ] GitHub 所有者 + 仓库名。**当前假设：`vlln/dsh-pr-inbox`**（本机 gh 登录是 `vlln`，
       其它插件也在 `vlln/` 下）。若改成组织（如 `omdsh-dev`），要同步改
       [README](../README.md) 安装节里的 `github:vlln/dsh-pr-inbox`。
-- [ ] 公开性：`--public`（要让别人能用 git 源装，必须公开）或 `--private`（只给自己/团队）
+- [x] 公开性：**public**（2026-10-16 定；要让别人能用 git 源装就得公开）
 - [ ] 是否同时发 npm：只走 `github:` 源完全可以（`lib/` 入库，使用者免构建、免 `allowBuilds`）
 - [ ] 是否在官方 Discussions 的 `Show Your Plugins!` 发一条介绍（对外可见的动作，需明确同意）
 
