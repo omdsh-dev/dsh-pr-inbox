@@ -12,6 +12,7 @@ import { runNoMachinePaths, scanText } from '../scripts/gates/no-machine-paths.m
 import { checkDecision, runDecisions } from '../scripts/gates/decisions.mjs'
 import { checkMarkdownLinks, extractLinks } from '../scripts/gates/md-links.mjs'
 import { checkGeneratedFreshness } from '../scripts/gates/generated-freshness.mjs'
+import { checkThemeTokens, runThemeTokens } from '../scripts/gates/theme-tokens.mjs'
 
 /** 造一份"合法"的 manifest，测试只改坏其中一个点。 */
 function manifest(overrides = {}) {
@@ -146,6 +147,38 @@ describe('md-links', () => {
   it('真实仓库通过（文档里的相对链接都指到真文件）', async () => {
     const { runMarkdownLinks } = await import('../scripts/gates/md-links.mjs')
     expect(runMarkdownLinks()).toEqual([])
+  })
+})
+
+describe('theme-tokens', () => {
+  it('抓颜色字面量（hex / rgba / 具名色）', () => {
+    const bad = checkThemeTokens({
+      files: [{ name: 'src/client/styles.ts', text: '.a { color: #fff; }\n.b { background: rgba(0, 0, 0, 0.5); }\n.c { border: 1px solid black; }' }],
+    })
+    expect(bad).toHaveLength(3)
+  })
+
+  it('抓自带主题分支', () => {
+    const branch = checkThemeTokens({
+      files: [{ name: 'src/client/styles.ts', text: '@media (prefers-color-scheme: dark) { .a { color: var(--dsw-alias-label-primary); } }' }],
+    })
+    expect(branch.join()).toMatch(/自带主题分支/)
+  })
+
+  it('放过令牌、transparent、纯数值与注释', () => {
+    const good = checkThemeTokens({
+      files: [{ name: 'src/client/styles.ts', text: [
+        '.a { color: var(--dsw-alias-label-primary); }',
+        '.b { background: transparent; border: 0.5px solid var(--dsw-alias-border-l2); }',
+        '.c { box-shadow: var(--dsw-elevation-soft); outline-color: var(--dsw-alias-link); }',
+        '/* 历史写法：color: #fff 已改掉 */',
+      ].join('\n') }],
+    })
+    expect(good).toEqual([])
+  })
+
+  it('真实仓库通过（客户端样式 0 个字面色值）', () => {
+    expect(runThemeTokens()).toEqual([])
   })
 })
 

@@ -1,67 +1,127 @@
-# dsh-pr-inbox
+<h1 align="center">dsh-pr-inbox</h1>
 
-DSH 侧边栏的 **PR 面板**：自动绑定当前会话工作区的项目，按「与我相关」分桶原生渲染
-GitHub Pull Request。数据来自**本机已登录的 `gh` CLI**，插件自己不存 token。
+<p align="center">
+  侧边栏里的 GitHub PR 收件箱：<b>我提的 / 待我审 / 最近合并</b> 三桶照进 DSH 侧栏，
+  一眼看完"该我动手的那几件"。绑定当前会话工作区的仓库，复用本机已登录的
+  <code>gh</code>，插件不存任何凭据，只读。
+</p>
 
-```text
-┌ 顶部：搜索框 ···························· [简洁|详细] ⟳ ┐
-│ ▾ 我提的 (2)                            author:@me      │
-│   ◯ #969  只读提交图（Git Graph）          3 小时前      │
-│   ◯ #968  页签名「文件变动」改为「Git」      3 小时前      │
-│ ▾ 待我审 (0)                     review-requested:@me   │
-│ ▾ 最近合并 (20)                   is:merged · 最近 20    │
-│   ◯ #967  release: v0.26.1 —— 稳态开销治理  4 小时前      │
-└─────────────────────────────────────────────────────────┘
-   ◯ = 作者头像（行首独立列；详细档多出作者/标签/评论那一条事实行）
-```
+<p align="center">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="dsh" src="https://img.shields.io/badge/dsh-0.2.0--rc.2-brightgreen">
+</p>
 
-## 设计取舍
+![三桶列表（简洁档）](docs/preview/compact.png)
 
-| 决定 | 为什么 |
-|---|---|
-| **复用本机 `gh` CLI**，而不是插件内填 PAT | token 全程不进插件、不进 profile 设置、不进模型上下文；代价是目标机器要有 `gh` 且已登录——缺它时面板给的是「装 gh / `gh auth login`」这种可操作提示，而不是一个空列表 |
-| **绑定当前工作区** | `git rev-parse --show-toplevel` + `remote.origin.url` → `owner/repo`；不再需要「先切仓库」 |
-| **只读 v1** | 不评论、不 approve、不合并；先证明「看」这件事做对了，写操作留到后面单独一批 |
-| **独立插件，不进 better-sidebar 核心** | 核心的 Git 面板刻意保持「纯本地 git、零网络」；GitHub 那半边生态一直在做（`dsh-github-workbench` 等），本插件用 `ctx.betterSidebar` 注册 tab 即可 |
-| 颜色只消费 `--dsw-alias-*` 令牌 | 跟随深浅主题与皮肤中心，插件不持有任何颜色字面量 |
-| **界面复用 DSH 官方控件** | 搜索框 / 按钮 / 密度切换 / 徽标 / 图标 / 文件路径分别用 `Input`、`Button`、`Pill`、`Tag`、官方 `Icon*`、`PathLabel`；官方没有的语义（分区头、PR 行）才自绘，且几何照官方规范（0.5px 分隔线、圆角按角色取 token） |
-| **行几何：头像钉在行首独立列** | 简洁（28px 单行）与详细（50px 两行）下，头像 / 编号 / 标题 / 时间 / 外链**逐项同 x 同宽**（挂载门直接量元素坐标，容差 1px）：切密度只是增删第二条事实行，已有信息一律不跳位。代价是简洁档不再重复作者名——作者由行首头像 + 行 tooltip 给出，宽度让给标题 |
-| **行边界用 0.5px 中性命线，不靠填充差** | 实测浅色主题下宿主 `bg-base`/`layer-1`/`layer-2`/`layer-3` **同为 `#fff`**，填充差恒为 0；官方 `border-l1`（4% 黑）在这个底色上几乎看不见，所以行线取 `border-l2`（10% 黑）。分区分界与行边界用同档线，靠**线的数量**（上一区块的行线 + 28px 头带 + 头带底线）区分层级 |
-| **分区头贴顶（sticky）** | 20 行以上的桶滚动时，当前分区的名字与计数始终留在上沿；条带自身填 `bg-base`（官方 sticky 条带的做法），否则行会从字下面穿过 |
-| **行内「在 GitHub 打开」静止不露面** | hover / 键盘聚焦才现形（触屏常显）；静止时 `pointer-events: none`，那 24px 的点击**穿透到行本身**——点哪儿都是开详情，不会误开外链 |
-| **正文与评论用宿主的 markdown 渲染器** | `MarkdownText`（GFM + TeX，围栏代码走官方 code card，丢弃原始 HTML）；插件不复刻一套排版 |
-| **文案走宿主 locale 字典** | `ctx.locale.register` + `bind(ns)`，跟随 DSH 语言偏好；取词失败落回本地表，绝不在宿主渲染路径里抛错 |
+## 为什么需要它
+
+"有没有该我动的 PR" 是个**每隔十几分钟就会重新出现**的问题。现在的做法通常是：
+切到浏览器 → 打开 GitHub → 在 Notifications 和几个仓库的 Pull requests 页之间来回看
+→ 还得自己记住哪些仓库跟自己有关。GH 的通知（网页/邮件/桌面）又是全站级别的噪音：
+推送、issue、CI 失败混在一起，真正"等我 review"的那两三条淹没在里面。
+
+这个插件把这件事挪回你**正在用的地方**：
+
+- **绑定工作区**：不用选仓库——会话在哪个仓库，面板就是哪个仓库的 PR（`git remote`
+  推出来的 `owner/repo`）。
+- **三桶就是三个动作语义**：`我提的`（我该跟进）、`待我审`（等我的动作，计数会变色）、
+  `最近合并`（我刚做的事落地没有）。想扫的时候一屏扫完。
+- **点开就是全文**：正文、评论与评审时间线、改动文件清单都在面板里渲染，不用跳浏览器
+  再回来。
+- **零新凭据**：只用你**已经登录**的 `gh`。不申请 token、不填 PAT、不落盘。
+
+与相邻方案的区别：GitHub 通知是**全站推送**（且不止 PR）；编辑器里的 GitHub 插件通常
+绑在"当前文件/当前 diff"。这里是"**当前工作区 + 与我相关**"这一刀，代价是必须先装
+`gh` 并登录（见下）。
 
 ## 安装
 
+前置：DSH 已装、本机 `gh` 已登录（`gh auth login`）。面板页签挂在
+[better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) 上，所以它也要装。
+
 ```bash
-# 前置：better-sidebar（tab 宿主）+ 本机 gh 已登录
 dsh plugin --profile web add dsh-better-sidebar
-dsh plugin --profile web add dsh-pr-inbox
+dsh plugin --profile web add "github:vlln/dsh-pr-inbox"
 ```
 
-开发/验证：`pnpm install && pnpm build`，然后见 `scripts/`（隔离 `DSH_HOME` 的真实挂载自检）。
+装完刷新页面（或按 DSH 提示重启 web）即可在**右侧栏**看到 `PR` 页签：
+展开右栏 → 从页签列表里选 `PR`。钉版本时在包名后加 `#v0.1.0` 这样的 ref
+（`github:vlln/dsh-pr-inbox#v0.1.0`）。
 
-## 结构
+> `lib/` 构建产物随仓库提交，所以 git 源安装**不需要**任何构建授权
+> （不会让你放行 `allowBuilds`，也不会在你的机器上跑构建脚本）。
 
+## 用起来是什么样
+
+| | |
+|---|---|
+| **顶部** | 搜索框（标题 / 编号 / 作者 / 标签，只在已加载的行里过滤）+ `简洁/详细` 切换 + 刷新 |
+| **简洁档** | 单行 28px：行首头像 · `#编号` · 标题 · 时间；适合快速扫 |
+| **详细档** | 两行 50px：第一行与简洁档**同一个位置**，第二行补作者、合并时间、标签、评论数 |
+| **分区块** | 三个桶各自成区，滚动时当前区的名字与计数贴在上沿；点击区头折叠 |
+| **点开一行** | 面板内打开完整 PR：正文（markdown 渲染，图片走宿主代理）、评论与评审时间线、改动文件清单（状态色标 + 增删行数）；`返回列表` 回到原位，当前项有强调条 |
+| **状态行** | 底部常显绑定的仓库、当前 gh 账号与数据的读取时间 |
+
+![三桶列表（详细档）](docs/preview/detailed.png)
+
+![PR 详情（正文 / 时间线 / 文件清单）](docs/preview/detail.png)
+
+## 能力面
+
+| 面 | 说明 |
+|---|---|
+| 侧边栏页签 | `PR` 页签，挂在 better-sidebar 的右栏；跟随 DSH 语言（中/英）与深浅主题 |
+| 三桶列表 | `我提的`（`author:@me`，开着的）、`待我审`（`review-requested:@me`）、`最近合并`（`is:merged`，最近 20 条） |
+| 行内操作 | 点行开详情；行内 `↗` 在 GitHub 打开（悬停/键盘聚焦才现形）；点击穿透不会误开外链 |
+| PR 详情 | 正文、评论与评审时间线、改动文件清单、分支与增删行、合并/更新时间；正文与单条评论有上限并**如实标注截断** |
+| 图片 | PR 正文里的仓库内相对路径图片经插件自有路由代理取字节（受限网络下 `raw.githubusercontent.com` 不可达；同时也覆盖私有仓库） |
+| 头像 | 作者头像；CDN 不可达时回退成首字母圆底——**不会出现破图图标** |
+| 语言 | 界面文案随 DSH 语言（zh / en）；插件在 Plugins 页的标题与描述也有中英两份 |
+
+## 环境与前置
+
+- **本机 `gh` 必须已登录**：面板的数据全部来自 `gh`（列表走 `gh search prs`，详情走
+  `gh pr view`）。缺 `gh` 或未登录时，面板给的是可操作提示（装 gh / `gh auth login`），
+  而不是空白列表。
+- **只支持 `github.com`**：其它 host（自建 GitLab / Gitea 等）会在列表里留一句说明，
+  详情返回 `unsupported-host`。
+- **需要 better-sidebar**：页签宿主。没装时 host 半照常工作，但界面上没有入口
+  （这是有意设计：不静默失败，也不假装能用）。
+
+## 已知限制
+
+- **只读**：没有任何写操作——不评论、不 approve、不 merge，也不接管聊天里的 GitHub 链接。
+- **最近合并是最近 20 条**，不是时间窗；**搜索只在已加载的行里做**，不会去 GitHub 全量搜。
+- **`gh` 的速率与超时**会如实反映在面板上（未登录 / 限流 / 超时各有各的提示与错误码）。
+- **正文图片**只走"仓库内相对路径 + 公开/私有仓库的 `refs/pull/<n>/head`"；正文里的
+  外链图片直接由浏览器加载（受限网络下可能显示不出来）。
+- 面板读的是**当前工作区**：会话还没确定工作目录时，面板会提示先产生一次工具调用
+  或打开文件，让它绑定到某个仓库。
+
+## 兼容性
+
+| dsh 版本 | 状态 |
+|---|---|
+| `0.2.0-rc.2` | ✅ 已验证（2026-10-16）：真实实例里装、跑、点开详情，含 git 源安装与负控 |
+| 其它版本 | ⚠️ 未验证。升级 dsh 后若**右栏没有 `PR` 页签**或**面板一直空白**，多半是宿主服务名/槽名或 client 契约变了（本插件按 `0.2.0-rc.2` 的服务名与 `__ModuleLoader__` 契约写） |
+
+## 插件管理
+
+装/卸/启停用官方 CLI：`dsh plugin --profile web add|remove <包>`；已装插件在**侧边栏
+Plugins 页**里查看与配置——每个插件自己的配置页挂在那个包页上（Settings 里的「插件」
+只是只读清单，改不了配置）。
+
+## 开发与验证
+
+```bash
+pnpm install && pnpm build        # 改源码后必须重建并提交 lib/（CI 会校验无漂移）
+node scripts/gates/run.mjs        # 静态门：包契约 / 发布卫生 / 决策记录 / 文档链接 / 产物新鲜度 / 单测
+node scripts/gates/run.mjs --list # 还有哪些实例门（真装真跑、负控、git 源安装冒烟）
 ```
-src/index.ts          Node half：注册 /plugins/dsh-pr-inbox/api
-src/host/gh.ts        gh 子进程边界（超时/输出上限/错误码分类/单飞探测）
-src/host/repo.ts      工作区 → owner/repo（parseRemoteUrl 纯函数）
-src/host/routes.ts    HTTP 信封（POST + { op } → { ok, value }）
-src/client/index.tsx  向 better-sidebar 注册 tab
-src/client/Panel.tsx  面板（阶段二：三桶列表 / 搜索 / 简洁·详细）
-src/client/Detail.tsx 详情视图（阶段三：正文 / 时间线 / 文件清单，插件自渲染）
-src/shared/types.ts   两端共享的类型
-```
 
-## 状态
+工程备忘录（机制、实测环境事实、验证证据、决策记录索引）在
+[docs/engineering-notes.md](docs/engineering-notes.md)。
 
-- 阶段一：工作区绑定 + `gh` 环境自检 + host↔client 通路。
-- 阶段二：三桶列表（我提的 / 待我审 / 最近合并）+ 顶部搜索 + 简洁/详细切换。几何按实测钉住：
-  头带按官方 `Input` 的自然高度（47px）· 分区头与简洁行 28px · 详细行 50px · 行首头像列 16px
-  （行内留白 12px 起）· 行线 0.5px `border-l2` · 当前项 = 选中底色 + 2px 内嵌强调条。
-- 阶段三：点开一行 → **插件自渲染**的 PR 详情（正文、评论与评审时间线、改动文件清单；
-  正文与时间线有界并如实标注截断，支线失败进 `warnings` 而不是空白）。
+## 许可
 
-写操作（评论 / approve / merge）不在只读 v1 的范围内。
+MIT

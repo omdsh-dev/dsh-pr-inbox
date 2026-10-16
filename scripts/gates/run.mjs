@@ -19,6 +19,7 @@ import { runNoMachinePaths } from './no-machine-paths.mjs'
 import { runDecisions } from './decisions.mjs'
 import { runMarkdownLinks } from './md-links.mjs'
 import { checkGeneratedFreshness } from './generated-freshness.mjs'
+import { runThemeTokens } from './theme-tokens.mjs'
 
 const GATES = {
   'package-contract': {
@@ -40,6 +41,11 @@ const GATES = {
     kind: 'static',
     about: '文档与 README 里的相对链接都指向真文件',
     check: () => runMarkdownLinks(),
+  },
+  'theme-tokens': {
+    kind: 'static',
+    about: '客户端样式不写死颜色、不自带主题分支（深色主题露馅的根因）',
+    check: () => runThemeTokens(),
   },
   'generated-freshness': {
     kind: 'static',
