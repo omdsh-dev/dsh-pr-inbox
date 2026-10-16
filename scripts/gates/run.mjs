@@ -61,6 +61,12 @@ const GATES = {
     about: '每个门禁用非法样例自证会拒绝',
     command: ['pnpm', ['exec', 'vitest', 'run', 'tests/gates.spec.mjs']],
   },
+  'git-source': {
+    kind: 'instance',
+    about: '真实发布通道：clone 已提交 HEAD → git+file 源安装 → 干净 boot + 真调路由',
+    script: 'scripts/gates/git-source.sh',
+    needs: ['gh 已登录', 'Playwright 驱动', '<workspace 路径>'],
+  },
   mounted: {
     kind: 'instance',
     about: '隔离 profile 里真装真跑：host 路由 + 浏览器面板 + 插件图标',
