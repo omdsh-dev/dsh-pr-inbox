@@ -13,7 +13,8 @@ import type { Context } from '@deepseek-ai/cordis'
 
 interface RouteCapableService {
   features?: readonly string[]
-  hostRouteUrl?: (path: string) => string
+  /** 宿主（better-sidebar）返回**绝对 URL**——注意是 `URL` 实例，不是字符串（实测）。 */
+  hostRouteUrl?: (path: string) => string | URL
 }
 
 export interface Envelope<T> {
@@ -33,13 +34,51 @@ function serviceOf(ctx: Context): RouteCapableService {
   return (ctx as unknown as { betterSidebar?: RouteCapableService }).betterSidebar ?? {}
 }
 
-/** 相对路径 → 绝对 URL（保留页面前缀）。 */
-export function hostRouteUrl(ctx: Context, path: string): string {
+/**
+ * 相对路径 → 绝对 URL（保留页面前缀）。
+ *
+ * 返回的可能是宿主给的 `URL` 实例（`fetch` 能用，字符串运算不行），所以要求字符串的
+ * 调用方用 {@link absoluteHostUrl}。
+ */
+export function hostRouteUrl(ctx: Context, path: string): string | URL {
   const service = serviceOf(ctx)
   if (typeof service.hostRouteUrl === 'function' && service.features?.includes('hostRouteUrl') === true) {
     return service.hostRouteUrl(path)
   }
   return new URL(path, document.baseURI).href
+}
+
+/** 拿一个绝对 URL 基址：只认 http(s)——`<img>` 跨源加载不需要 CORS，所以桌面壳里用得上。 */
+function httpBase(): string | undefined {
+  const candidates = [
+    typeof document === 'undefined' ? undefined : document.baseURI,
+    (globalThis as { __DSH_TRANSPORT__?: { streamBaseUrl?: string } }).__DSH_TRANSPORT__?.streamBaseUrl,
+  ]
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === '') continue
+    try {
+      const protocol = new URL(candidate).protocol
+      if (protocol === 'http:' || protocol === 'https:') return candidate
+    } catch { /* 试下一个 */ }
+  }
+  return undefined
+}
+
+/**
+ * **必须绝对**的 URL（图片用）：官方 markdown 渲染器只接受 `new URL(x)` 能解析、且协议是
+ * `http` / `https` / `blob` / `data` 的地址（`vocabularyImageUrl`）——相对路径会被判成
+ * "没有可显示的图"，正文里的图片于是退化成 alt 文本。
+ *
+ * 页面基址是 `http(s)` 时就用它（web 形态与反代前缀都对）；桌面壳的页面基址是
+ * `dsh-app://app/`，那个协议**不在官方白名单里**（白名单只额外放行
+ * `dsh-app://app/api/file?`），所以改用注入的传输基址——它正是宿主真实 origin，
+ * 而 `<img>` 跨源取图不受同源策略限制（这也是它不能拿来做 fetch 的原因）。
+ */
+export function absoluteHostUrl(ctx: Context, path: string): string {
+  const resolved = hostRouteUrl(ctx, path)
+  const text = typeof resolved === 'string' ? resolved : resolved.href
+  const base = httpBase()
+  return base === undefined ? text : new URL(text, base).href
 }
 
 /** 调本插件自己的 host op。失败抛 `RouteError`（码原样带出，UI 可分辨 gh 缺失）。 */

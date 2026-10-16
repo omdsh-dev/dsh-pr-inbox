@@ -6,6 +6,11 @@
  * `CodeBlock`、丢弃原始 HTML、限制协议；`labels` 是必填契约（复制/脚注/代码卡工具栏
  * 文案），走本插件字典，漏传会回退硬编码中文。
  *
+ * **图片**要走两步才渲染得出来（实测，见 markdown-images.ts 与 docs/engineering-notes.md）：
+ * ① GitHub 编辑器插入的图片是原始 `<img>` 标签，而官方渲染器丢弃原始 HTML → 先经
+ * `expandHtmlImages` 改写成 markdown 图片语法；② 官方只接受绝对 http(s)/blob/data 地址
+ * → 仓库内相对路径经 `absoluteHostUrl` 走插件自己的图片代理。
+ *
  * 其余官方件：`Tag`（身份/状态/标签/文件状态）、`Button`（返回/刷新/外链）、
  * `PathLabel`（文件路径：目录弱化、文件名主色、窄列保后缀）、官方图标。
  *
@@ -26,9 +31,10 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MarkdownLabels, MarkdownPathImages } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PrDetailComment, PrDetailFile, PrDetailValue } from '../shared/types'
-import { hostRouteUrl } from './api'
+import { absoluteHostUrl } from './api'
 import { Author } from './bits'
 import { avatarUrlOf, formatAge, formatDate } from './format'
+import { expandHtmlImages } from './markdown-images'
 import { resolvePrImagePath } from './pr-image'
 import type { I18n } from './i18n'
 
@@ -77,7 +83,7 @@ function Comment({ entry, labels, pathImages, i18n }: { entry: PrDetailComment, 
     createElement('div', { key: 'h', className: 'pi-commentHead' }, head),
     createElement(MarkdownText, {
       key: 'b',
-      text: entry.body === '' ? t('emptyBody') : entry.body,
+      text: entry.body === '' ? t('emptyBody') : expandHtmlImages(entry.body),
       labels,
       pathImages,
       variant: 'compact',
@@ -123,14 +129,17 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
     },
     footnotes: t('footnotes'),
   }), [t])
-  /** 正文里的相对图片按 head 提交改写成 raw URL（见 resolvePrImage 的边界说明）。 */
+  /**
+   * 正文 / 评论里的仓库内相对图片 → 插件自己的图片代理（绝对 URL，官方只认这种）。
+   * ref 用 `refs/pull/<n>/head`：base 仓里就有这个 ref，fork PR 也适用（headRef 会 404）。
+   */
   const pathImages = useMemo(() => ({
     resolve: (value: string): string | undefined => {
       if (detail === undefined) return undefined
       // refs/pull/<n>/head：base 仓里就有这个 ref；headRef 对 fork PR 只在 fork 上，
       // 用它会 404（这条来自图片代理那一侧的实测建议）。
       const relative = resolvePrImagePath(value, detail.repo, `refs/pull/${detail.number}/head`, cwd)
-      return relative === undefined ? undefined : hostRouteUrl(ctx as never, relative)
+      return relative === undefined ? undefined : absoluteHostUrl(ctx, relative)
     },
   }), [ctx, cwd, detail?.repo.host, detail?.repo.owner, detail?.repo.name, detail?.number])
 
@@ -189,7 +198,7 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
     }
     body.push(createElement('div', { key: 'prose', className: 'pi-card', 'data-pi-body': '' },
       createElement(MarkdownText, {
-        text: detail.body === '' ? t('emptyBody') : detail.body,
+        text: detail.body === '' ? t('emptyBody') : expandHtmlImages(detail.body),
         labels,
         pathImages,
         variant: 'body',

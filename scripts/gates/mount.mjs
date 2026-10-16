@@ -367,6 +367,58 @@ if (boundary === null) fail('找不到正文卡片或面板根，无法验证分
 if (!fillDiffers && !hairline) fail('正文块与面板底既无填充差也无发丝边界：分块不可见')
 if (!(boundary.cardRadius > 0)) fail('正文卡片没有圆角：分块几何没生效')
 if (boundary.cardCount < 2) fail('详情里只看到 1 张卡（正文/评论/文件清单应各自成块）')
+// ── 正文图片（用户报过的问题）─────────────────────────────────────────────────
+// GitHub 编辑器插入的图片是**原始 `<img>` 标签**，而官方 `MarkdownText` 是"不可信
+// assistant markdown"渲染器：原始 HTML 一律不渲染。所以插件先把它改写成 markdown 图片
+// （src/client/markdown-images.ts）。这里断言的是端到端结果：正文里真的有 `<img>`、
+// 地址是官方白名单能接受的绝对协议、并且至少一张把字节取回来了——只看"函数返回了字符串"
+// 证明不了浏览器里能看见图。
+const imagesOf = () => page.evaluate(async () => {
+  const body = document.querySelector('[data-pi-body]')
+  if (body === null) return null
+  const images = [...body.querySelectorAll('img')]
+  const accepted = (node) => {
+    const src = node.getAttribute('src') ?? ''
+    try { return ['http:', 'https:', 'blob:', 'data:'].includes(new URL(src, document.baseURI).protocol) } catch { return false }
+  }
+  // 官方 <img> 带 `loading="lazy"`：不滚到可见处会永远停在 pending（头像那一轮踩过）。
+  for (const node of images) {
+    node.scrollIntoView({ block: 'center' })
+    await new Promise(resolve => setTimeout(resolve, 60))
+  }
+  return {
+    count: images.length,
+    literal: /<img\b/i.test(body.textContent ?? ''),
+    items: images.map(node => ({
+      src: (node.getAttribute('src') ?? '').slice(0, 110),
+      accepted: accepted(node),
+      loaded: node.complete && node.naturalWidth > 0,
+      pending: !node.complete,
+    })),
+  }
+})
+let bodyImages = await imagesOf()
+if (bodyImages === null) fail('找不到正文卡片，无法验证正文图片')
+// 等到没有"悬挂"为止（要么解码成功、要么浏览器判定失败）——只等"至少一张成功"会让
+// 第二张的悬挂状态被当成通过，这一条与头像那轮的口径保持一致。
+for (let attempt = 0; attempt < 40; attempt++) {
+  if (!bodyImages.items.some(item => item.pending)) break
+  await page.waitForTimeout(500)
+  bodyImages = await imagesOf()
+}
+console.log(`· 正文图片：${bodyImages.count} 个 <img>（已解码 ${bodyImages.items.filter(i => i.loaded).length} / 悬挂 ${bodyImages.items.filter(i => i.pending).length}）· 标签字面残留 ${bodyImages.literal}`)
+for (const item of bodyImages.items.slice(0, 3)) {
+  console.log(`    ${item.loaded ? '✓' : item.pending ? '…' : '✗'} ${item.accepted ? '' : '(协议不被官方接受) '}${item.src}`)
+}
+if (bodyImages.literal) fail('正文里 <img> 标签变成了字面文本（改写没生效）')
+if (bodyImages.count === 0) fail('#969 的正文有 HTML <img>，但正文里一个 <img> 都没有（原始 HTML 被丢弃、改写没生效）')
+const rejected = bodyImages.items.filter(item => !item.accepted)
+if (rejected.length > 0) fail(`正文图片地址不是官方接受的绝对协议：${rejected.map(item => item.src).join(' · ')}`)
+if (!bodyImages.items.some(item => item.loaded)) {
+  fail(`正文图片一个都没解码成功（网络或被拦）：${bodyImages.items.map(item => item.src).join(' · ')}`)
+}
+step(`正文图片渲染：${bodyImages.count} 个 <img> 且已解码`)
+
 const bodyLength = ((await page.locator('[data-pi-body]').first().innerText()) ?? '').length
 const commentCount = await page.locator('[data-pi-comment]').count()
 console.log(`· 详情 #969：正文 ${bodyLength} 字符、文件行 ${detailFiles}、时间线 ${commentCount}`)

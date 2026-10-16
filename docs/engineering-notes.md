@@ -51,6 +51,8 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 | DSH **浅色**主题下 `--dsw-alias-bg-base` / `bg-layer-1` / `bg-layer-2` / `bg-layer-3` **同为 `#fff`** | 页面 `getComputedStyle` + 主题表 grep 一致 | 流内分块**不能**靠填充差；边界只能用 0.5px 发丝线（`border-l1`=4% 黑几乎不可见，行线取 `border-l2`=10% 黑，实测 `rgba(0,0,0,0.1)`） |
 | `0.5px` 在 DPR=1 上被画成 **1 设备像素** | 挂载门打印 `borderTopWidth` = `1px` | 门里的判据写「≥0.5px」，不写「==0.5」 |
 | `raw.githubusercontent.com` 在本环境**完全不可达**（curl HTTP 000）；`avatars.githubusercontent.com` 可达但慢（1–10s） | curl 实测 | PR 正文图片必须走宿主代理路由；头像用真实 URL + 首字母回退（绝不出现破图图标） |
+| **官方 markdown 渲染器丢弃块级原始 HTML、把行内原始 HTML 当字面文本**（行内走 `case "html": return node.value`）；图片地址白名单只认绝对 `http(s)` / `blob` / `data`（`vocabularyImageUrl` 里 `new URL(url)` 必须成功） | 用户报"PR 正文图片渲染不出来" → 定位到 #969 正文是 `<img src=…>`（GitHub 编辑器插图就是这个形态）；修复前后 `innerText` 差值 264 ≈ 两个标签串长度，证实是"以字面文本出现" | PR 正文/评论必须先把 `<img>` 改写成 markdown 图片（`markdown-images.ts`）；`pathImages.resolve` 必须返回**绝对** URL 字符串（`absoluteHostUrl`） |
+| 宿主 `better-sidebar` 的 `hostRouteUrl(path)` 返回 **`URL` 实例**（不是字符串） | 读它的 `host-route-url.ts`；`fetch` 能用所以一直没暴露 | 需要字符串的地方（尤其官方图片地址校验）必须先规范化，类型上也要写成 `string \| URL` |
 | 插件在自己渲染路径里抛错会**连带打掉宿主那条 slot 的整棵渲染树** | 页签整条不出现 → console 里 `chain is not iterable at LocaleRuntime.lookup`（当时调了私有 `lookup`） | 取词/取数一律裹 `safe()`；只碰公开面（`register` + `bind`） |
 | 一个 client 行激活失败会**让整个 web boot 失败** | 负控门 C：坏 client 行 → 控制台 `web boot: 1 entry did not activate`，整页渲染不出来 | client 行的 `inject` 必须与服务名逐字一致；改服务名先跑负控 |
 | `gh` 在写缓存时若 `~/.cache` 不可写会失败 | 沙箱内实测 | 门/测试里用 `XDG_CACHE_HOME` 指到自己的 scratch |
@@ -76,7 +78,7 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 | 门 | 证明什么 | 最近一次实测 |
 |---|---|---|
 | `git-source` | **真实发布通道**（`git+file://` 等价于 README 给用户的 `github:` 源）装得上、boot 干净、路由真应答 | 全绿：无 ERESOLVE（git 依赖不装 devDependencies）、日志 0 失败行、三 op + 围栏通过 |
-| `mounted` | 隔离 profile 里真装真跑：右栏条目出现 → 面板渲染出绑定的项目 → 行几何/分层/贴顶/头像都量成数字。`THEME=dark` 再跑一遍（深色截图 + 主题自证） | 全绿：行高 28/50、头带 47、行首留白 12、头像 x=717 两档一致、行线 1px/`rgba(0,0,0,0.1)`、贴顶 y=滚动口上沿、头像 22/22 无破图无悬挂 |
+| `mounted` | 隔离 profile 里真装真跑：右栏条目出现 → 面板渲染出绑定的项目 → 行几何/分层/贴顶/头像/**正文图片**都量成数字。`THEME=dark` 再跑一遍（深色截图 + 主题自证） | 全绿：行高 28/50、头带 47、行首留白 12、头像 x=717 两档一致、行线 1px/`rgba(0,0,0,0.1)`、贴顶 y=滚动口上沿、头像全解码无悬挂、**#969 正文 2 个 `<img>` 全部解码且无标签字面残留** |
 | `negative-control` | 负控：坏副本必须**响亮**报错，否则上面那条「日志干净」不算证据 | 全绿：A 基线 `entry:true`；B 坏 host → `did not activate` + `pending (waiting for service: …)` + 路由 405；C 坏 client → 条目不出现 + 控制台 `web boot: 1 entry did not activate` |
 | `standalone` | better-sidebar 缺席时：host 半照常应答、client 半安全未激活 | 全绿 |
 

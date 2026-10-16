@@ -93,7 +93,7 @@ dsh plugin --profile web add "github:vlln/dsh-pr-inbox"
 | 三桶列表 | `我提的`（`author:@me`，开着的）、`待我审`（`review-requested:@me`）、`最近合并`（`is:merged`，最近 20 条） |
 | 行内操作 | 点行开详情；行内 `↗` 在 GitHub 打开（悬停/键盘聚焦才现形）；点击穿透不会误开外链 |
 | PR 详情 | 正文、评论与评审时间线、改动文件清单、分支与增删行、合并/更新时间；正文与单条评论有上限并**如实标注截断** |
-| 图片 | PR 正文里的仓库内相对路径图片经插件自有路由代理取字节（受限网络下 `raw.githubusercontent.com` 不可达；同时也覆盖私有仓库） |
+| 图片 | 正文与评论里的图片都会渲染：GitHub 编辑器插入的 `<img …>` HTML 形态会被改写成 markdown 图片，仓库内**相对路径**图片经插件自有路由代理取字节（受限网络下 `raw.githubusercontent.com` 不可达；同时也覆盖私有仓库） |
 | 头像 | 作者头像；CDN 不可达时回退成首字母圆底——**不会出现破图图标** |
 | 语言 | 界面文案随 DSH 语言（zh / en）；插件在 Plugins 页的标题与描述也有中英两份 |
 
