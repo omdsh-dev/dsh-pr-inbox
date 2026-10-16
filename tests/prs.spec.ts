@@ -103,6 +103,14 @@ describe('normalizeSearchItem', () => {
     expect(normalizeSearchItem(item())?.mergedAt).toBeUndefined()
   })
 
+  it('carries the author avatar when GitHub gives one, and omits the key otherwise', () => {
+    const avatar = 'https://avatars.githubusercontent.com/u/1?v=4'
+    expect(normalizeSearchItem(item({ user: { login: 'vlln', avatar_url: avatar } }))?.authorAvatar).toBe(avatar)
+    // 上面那条 toEqual 已经钉住「没有 avatar_url 时不产出该键」；这里再钉空串与缺字段两条。
+    expect(normalizeSearchItem(item())?.authorAvatar).toBeUndefined()
+    expect(normalizeSearchItem(item({ user: { login: 'vlln', avatar_url: '' } }))?.authorAvatar).toBeUndefined()
+  })
+
   it('tolerates missing labels / user / counters instead of inventing values', () => {
     const row = normalizeSearchItem(item({ labels: undefined, user: undefined, comments: undefined, draft: undefined }))
     expect(row).toMatchObject({ labels: [], author: '', comments: 0, isDraft: false })

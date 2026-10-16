@@ -43,7 +43,7 @@ interface SearchItem {
   number?: unknown
   title?: unknown
   html_url?: unknown
-  user?: { login?: unknown }
+  user?: { login?: unknown; avatar_url?: unknown }
   draft?: unknown
   state?: unknown
   created_at?: unknown
@@ -65,11 +65,13 @@ export function normalizeSearchItem(item: SearchItem): PrRow | undefined {
       .filter((name): name is string => typeof name === 'string' && name !== '')
     : []
   const mergedAt = item.pull_request?.merged_at
+  const avatar = item.user?.avatar_url
   return {
     number,
     title,
     url,
     author: typeof item.user?.login === 'string' ? item.user.login : '',
+    ...(typeof avatar === 'string' && avatar !== '' ? { authorAvatar: avatar } : {}),
     isDraft: item.draft === true,
     state: typeof item.state === 'string' ? item.state : 'open',
     createdAt: typeof item.created_at === 'string' ? item.created_at : '',

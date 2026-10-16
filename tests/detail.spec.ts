@@ -140,6 +140,13 @@ describe('normalizePull', () => {
       .toBe('2026-10-16T07:00:00Z')
   })
 
+  it('carries the author avatar when GitHub gives one, and omits the key otherwise', () => {
+    const avatar = 'https://avatars.githubusercontent.com/u/2?v=4'
+    expect(normalizePull({ ...PULL, user: { login: 'vlln', avatar_url: avatar } })?.authorAvatar).toBe(avatar)
+    expect(normalizePull(PULL)?.authorAvatar).toBeUndefined()
+    expect(normalizePull({ ...PULL, user: { login: 'vlln', avatar_url: '' } })?.authorAvatar).toBeUndefined()
+  })
+
   it('returns undefined when upstream loses the identity fields', () => {
     expect(normalizePull({ ...PULL, number: undefined })).toBeUndefined()
     expect(normalizePull({ ...PULL, title: 7 })).toBeUndefined()
@@ -172,6 +179,18 @@ describe('normalizeFile / normalizeIssueComment / normalizeReview', () => {
     expect(normalizeReview({ user: { login: 'a' }, state: 'APPROVED', submitted_at: '2026-10-16T06:00:00Z', body: '' }))
       .toMatchObject({ kind: 'review', author: 'a', reviewState: 'APPROVED' })
   })
+
+  it('carries each timeline entry author avatar, or omits the key', () => {
+    const commentAvatar = 'https://avatars.githubusercontent.com/u/3?v=4'
+    const reviewAvatar = 'https://avatars.githubusercontent.com/u/4?v=4'
+    expect(normalizeIssueComment({ user: { login: 'a', avatar_url: commentAvatar }, created_at: 'x', body: 'b' })?.authorAvatar)
+      .toBe(commentAvatar)
+    expect(normalizeIssueComment({ user: { login: 'a' }, created_at: 'x', body: 'b' })?.authorAvatar).toBeUndefined()
+    expect(normalizeReview({ user: { login: 'a', avatar_url: reviewAvatar }, state: 'APPROVED', submitted_at: 'x', body: '' })?.authorAvatar)
+      .toBe(reviewAvatar)
+    expect(normalizeReview({ user: { login: 'a' }, state: 'APPROVED', submitted_at: 'x', body: '' })?.authorAvatar).toBeUndefined()
+    expect(normalizeReview({ user: { login: 'a', avatar_url: '' }, state: 'APPROVED', submitted_at: 'x', body: '' })?.authorAvatar).toBeUndefined()
+  })
 })
 
 describe('mergeTimeline', () => {
@@ -180,6 +199,14 @@ describe('mergeTimeline', () => {
     const reviews = REVIEWS.map(row => normalizeReview(row)!)
     expect(mergeTimeline(comments, reviews).map(row => `${row.kind}:${row.author}`))
       .toEqual(['review:other', 'comment:reviewer', 'review:maintainer'])
+  })
+
+  it('passes the author avatar through the merge', () => {
+    const rows = mergeTimeline(
+      [{ kind: 'comment', author: 'a', authorAvatar: 'https://avatars.githubusercontent.com/u/5?v=4', createdAt: '2026-10-16T05:00:00Z', body: '' }],
+      [],
+    )
+    expect(rows[0]?.authorAvatar).toBe('https://avatars.githubusercontent.com/u/5?v=4')
   })
 
   it('keeps unparsable dates from throwing the sort', () => {

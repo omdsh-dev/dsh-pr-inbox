@@ -42,6 +42,8 @@ export interface PrRow {
   updatedAt: string
   /** 已合并时间；未合并为 undefined。 */
   mergedAt?: string
+  /** 作者头像 URL（`user.avatar_url`）；上游没给就不产出该键，渲染方自己回退。 */
+  authorAvatar?: string
   labels: string[]
   comments: number
 }
@@ -78,6 +80,8 @@ export interface PrDetailFile {
 export interface PrDetailComment {
   kind: 'comment' | 'review'
   author: string
+  /** 作者头像 URL（`user.avatar_url`）；缺失即不产出该键。 */
+  authorAvatar?: string
   createdAt: string
   body: string
   /** 仅 review：APPROVED / CHANGES_REQUESTED / COMMENTED / DISMISSED / PENDING。 */
@@ -99,6 +103,8 @@ export interface PrDetailValue {
   bodyTruncated: boolean
   url: string
   author: string
+  /** 作者头像 URL（`user.avatar_url`）；缺失即不产出该键。 */
+  authorAvatar?: string
   state: string
   isDraft: boolean
   createdAt: string

@@ -44,7 +44,7 @@ interface PullPayload {
   title?: unknown
   body?: unknown
   html_url?: unknown
-  user?: { login?: unknown }
+  user?: { login?: unknown; avatar_url?: unknown }
   state?: unknown
   draft?: unknown
   created_at?: unknown
@@ -64,6 +64,13 @@ interface PullPayload {
 
 const str = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback)
 const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+
+/** 作者头像 URL：只接受非空字符串，缺失/空串就**不产出该键**
+ *  （与 mergedAt / previousPath 同一风格，渲染方自己回退占位）。 */
+function avatarOf(user: unknown): { authorAvatar?: string } {
+  const url = (user as { avatar_url?: unknown } | undefined)?.avatar_url
+  return typeof url === 'string' && url !== '' ? { authorAvatar: url } : {}
+}
 
 function labelNames(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
@@ -87,6 +94,7 @@ export function normalizePull(raw: PullPayload): Omit<PrDetailValue, 'repo' | 'f
     bodyTruncated: body.truncated,
     url: str(raw.html_url),
     author: str(raw.user?.login),
+    ...avatarOf(raw.user),
     state: str(raw.state, 'open'),
     isDraft: raw.draft === true,
     createdAt: str(raw.created_at),
@@ -127,6 +135,7 @@ export function normalizeIssueComment(raw: Record<string, unknown>): PrDetailCom
   return {
     kind: 'comment',
     author: str((raw.user as { login?: unknown } | undefined)?.login),
+    ...avatarOf(raw.user),
     createdAt: str(raw.created_at),
     body: capped.truncated ? `${capped.text}\n\n…（本条评论过长，已截断）` : capped.text,
   }
@@ -140,6 +149,7 @@ export function normalizeReview(raw: Record<string, unknown>): PrDetailComment |
   return {
     kind: 'review',
     author: str((raw.user as { login?: unknown } | undefined)?.login),
+    ...avatarOf(raw.user),
     createdAt: str(raw.submitted_at ?? raw.created_at),
     body: capped.text,
     reviewState: state,
