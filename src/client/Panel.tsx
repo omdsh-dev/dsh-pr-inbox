@@ -27,8 +27,9 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { BucketKey, BucketValue, ListValue, PrDetailValue, PrRow } from '../shared/types'
 import { RouteError, callOp, resolveCwd } from './api'
+import { Age, Author } from './bits'
 import { Detail } from './Detail'
-import { formatAge, matchesQuery } from './format'
+import { avatarUrlOf, formatAge, isFresh, matchesQuery } from './format'
 import type { I18n } from './i18n'
 
 export interface PanelProps {
@@ -94,6 +95,7 @@ function Row(props: { row: PrRow, density: Density, selected: boolean, onSelect:
   const subject = createElement('span', { key: 't', className: 'pi-subject', title: row.title }, row.title)
   const external = createElement(OpenExternal, { key: 'x', url: row.url, label: t('openOnGitHub') })
   const handlers = rowHandlers(() => { props.onSelect(row) })
+  const avatar = avatarUrlOf(row)
   if (density === 'compact') {
     return createElement('div', {
       ...handlers,
@@ -106,10 +108,14 @@ function Row(props: { row: PrRow, density: Density, selected: boolean, onSelect:
       num, subject,
       row.isDraft ? createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')) : null,
       external,
-      createElement('span', { key: 'm', className: 'pi-meta' }, `${row.author} · ${formatAge(row.updatedAt)}`),
+      createElement('span', { key: 'm', className: 'pi-meta' }, [
+        createElement(Author, { key: 'a', login: row.author, ...(avatar === undefined ? {} : { avatar }) }),
+        createElement('span', { key: 's' }, '·'),
+        createElement(Age, { key: 't', iso: row.updatedAt }),
+      ]),
     ])
   }
-  const pills: ReactNode[] = [createElement(Tag, { key: 'a', tone: 'quiet' }, row.author)]
+  const pills: ReactNode[] = [createElement(Author, { key: 'a', login: row.author, ...(avatar === undefined ? {} : { avatar }) })]
   if (row.mergedAt !== undefined) {
     pills.push(createElement(Tag, { key: 'm', tone: 'info' }, `${t('mergedAt')} ${formatAge(row.mergedAt)}`))
   }
@@ -133,7 +139,7 @@ function Row(props: { row: PrRow, density: Density, selected: boolean, onSelect:
       num, subject,
       row.isDraft ? createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')) : null,
       external,
-      createElement('span', { key: 'm', className: 'pi-meta' }, formatAge(row.updatedAt)),
+      createElement(Age, { key: 'm', iso: row.updatedAt }),
     ]),
     createElement('div', { key: 'l2', className: 'pi-line2' }, pills),
   ])
@@ -173,7 +179,7 @@ function Section(props: {
     }, [
       createElement('span', { key: 'c', className: 'pi-chevron' }, createElement(IconChevronDownOutlineRegular, { size: 14 })),
       createElement('span', { key: 'l', className: 'pi-sectionLabel' }, t(BUCKET_LABEL[bucket])),
-      createElement('span', { key: 'n', className: 'pi-sectionCount' }, count),
+      createElement('span', { key: 'n', className: 'pi-sectionCount', 'data-attention': bucket === 'review' && total > 0 ? 'true' : undefined }, count),
       createElement('span', { key: 'q', className: 'pi-hint' }, t(BUCKET_HINT[bucket])),
     ]),
     createElement('div', { key: 'b', className: 'pi-rows' }, body),
@@ -266,6 +272,8 @@ export function Panel({ ctx, i18n, sessionId, cwd, visible }: PanelProps) {
         loading: detail.loading,
         error: detail.error,
         i18n,
+        ctx,
+        cwd: cwdRef.current ?? cwd,
         onBack: back,
         onRefresh: () => { void loadDetail(open) },
       }))
@@ -277,18 +285,17 @@ export function Panel({ ctx, i18n, sessionId, cwd, visible }: PanelProps) {
         icon: createElement(IconSearchOutlineRegular, {}),
         placeholder: t('searchPlaceholder'),
         'aria-label': t('searchPlaceholder'),
-        'data-pi-search': '',
         value: query,
         spellCheck: false,
         onChange: (event: { target: { value: string } }) => { setQuery(event.target.value) },
       })),
     createElement('span', { key: 'd', className: 'pi-density' }, [
       createElement(Pill, {
-        key: 'c', active: density === 'compact', 'data-pi-density': 'compact',
+        key: 'c', active: density === 'compact',
         onClick: () => { setDensity('compact') },
       }, t('compact')),
       createElement(Pill, {
-        key: 'x', active: density === 'detailed', 'data-pi-density': 'detailed',
+        key: 'x', active: density === 'detailed',
         onClick: () => { setDensity('detailed') },
       }, t('detailed')),
     ]),

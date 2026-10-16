@@ -59,6 +59,8 @@ const CSS = `
   font: var(--dsw-font-xxxs-11);
   font-variant-numeric: tabular-nums;
 }
+/* 「待我审」有货时计数取警告色：这是面板里唯一「需要你动作」的信号。 */
+.pi-sectionCount[data-attention='true'] { color: var(--dsw-alias-state-warn-primary); }
 .pi-hint { flex: none; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
 .pi-chevron { flex: none; display: inline-flex; color: var(--dsw-alias-label-tertiary); transition: transform 120ms var(--ds-ease-in-out); }
 .pi-section[data-open='false'] .pi-chevron { transform: rotate(-90deg); }
@@ -102,13 +104,30 @@ const CSS = `
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dsw-alias-label-primary);
-  font: var(--dsw-font-xxs-strong-12);
+  /* 正文档跟随用户字号设置（官方：正文/描述读 --dsh-content-font-size，别写死 px）。 */
+  font-size: var(--dsh-content-font-size);
+  line-height: 1.35;
+  font-weight: 500;
 }
-.pi-meta { flex: none; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pi-meta {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-content-font-size-secondary);
+  line-height: 1.3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* 作者名 + 16px 圆头像的横排（头像只在 host 给出 URL 时渲染）。 */
+.pi-authorName { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* 24h 内动过的行给第二层色阶（不是强调色：强调色只留给「当前项」）。 */
+.pi-meta[data-fresh='true'] { color: var(--dsw-alias-label-secondary); }
 .pi-grow { flex: 1; min-width: 0; }
 
-.pi-empty { padding: 10px 12px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
-.pi-notice { padding: 8px 12px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxs-12); white-space: pre-wrap; }
+.pi-empty { padding: 10px 12px; color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary); line-height: 1.4; }
+.pi-notice { padding: 8px 12px; color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary); line-height: 1.45; white-space: pre-wrap; }
 .pi-notice[data-tone='error'] { color: var(--dsw-alias-state-error-primary); }
 .pi-notice[data-tone='warn'] { color: var(--dsw-alias-state-warn-primary); }
 
@@ -129,10 +148,55 @@ const CSS = `
 
 /* ── 详情（正文与评论排版交给官方 MarkdownText，这里只管骨架）──────────── */
 .pi-detail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.pi-detailTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--dsw-font-xxs-strong-12); }
+.pi-detailTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--dsh-content-font-size);
+  font-weight: 500;
+}
+/* 作者名：官方链接外观（link 色 + 500；静止无下划线，hover/focus 点线下划线）。 */
+.pi-author {
+  color: var(--dsw-alias-link);
+  font-weight: 500;
+  text-decoration: none;
+}
+.pi-author:hover, .pi-author:focus-visible { text-decoration: underline dotted; text-underline-offset: 3px; }
+/* 头像：圆必须显式退出超椭圆（否则被 superellipse 压成方角）。 */
+.pi-avatar {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  corner-shape: round;
+  object-fit: cover;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+/* 首字母回退：同一几何，圆底 + 次级色小字（CDN 不可达时不出现破图）。 */
+.pi-avatarInitials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsw-font-xxxs-strong-11, 11px);
+  font-weight: 500;
+  line-height: 1;
+  overflow: hidden;
+}
 .pi-detailBody { flex: 1; min-height: 0; overflow: auto; padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .pi-detailMeta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.pi-detailStats { display: flex; align-items: center; gap: 8px; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.pi-detailStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-content-font-size-secondary);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+}
 .pi-branch { display: inline-flex; align-items: center; gap: 4px; font-family: var(--ds-font-family-code, ui-monospace, monospace); }
 .pi-add { color: var(--dsw-alias-state-success-primary); }
 .pi-del { color: var(--dsw-alias-state-error-primary); }

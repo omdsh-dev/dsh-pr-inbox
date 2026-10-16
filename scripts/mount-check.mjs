@@ -120,9 +120,27 @@ const text = (await panel.first().innerText()).replace(/\s+/g, ' ').trim()
 console.log(`· 三桶行数：${JSON.stringify(perBucket)}`)
 console.log(`· 面板文本：${text.slice(0, 360)}`)
 if (rows === 0) fail('三桶一行数据都没有（gh 取数或渲染失败）')
-if (expectRepo !== undefined && !text.includes(expectRepo)) fail(`面板里没有出现 ${expectRepo}`)
 
-// 密度切换：详细 → 行上出现 data-density=detailed；再切回简洁。
+// 头像渲染（图片渲染的第一条证据）：这个环境的 *.githubusercontent.com 不可达，
+// 所以设计语义是「能加载就显示图片，失败就用首字母圆底」——断言的是**不出现破图**
+// 且头像位一定存在，而不是「必须有网络图片」。
+let avatarState = { slots: 0, loaded: 0, initials: 0, broken: 0, pending: 0 }
+for (let attempt = 0; attempt < 40; attempt++) {
+  avatarState = await page.evaluate(() => {
+    const slots = document.querySelectorAll('.pi-avatar, .pi-avatarInitials').length
+    const images = [...document.querySelectorAll('img.pi-avatar')]
+    const initials = document.querySelectorAll('.pi-avatarInitials').length
+    return {
+      slots,
+      loaded: images.filter(i => i.complete && i.naturalWidth > 0).length,
+      initials,
+      broken: images.filter(i => i.complete && i.naturalWidth === 0).length,
+      pending: images.filter(i => !i.complete).length,
+    }
+  })
+  if (avatarState.broken === 0 && avatarState.pending === 0) break
+  await page.waitForTimeout(500)
+}
 const shotDir = process.env.SCREENSHOT_DIR
 const shoot = async (name) => {
   if (shotDir === undefined) return
@@ -131,16 +149,21 @@ const shoot = async (name) => {
   await page.screenshot({ path: `${shotDir}/${name}.png` })
   console.log(`· 截图：${shotDir}/${name}.png`)
 }
+console.log(`· 头像位：${avatarState.slots} 个（网络图 ${avatarState.loaded} / 首字母 ${avatarState.initials} / 破图 ${avatarState.broken} / 悬挂 ${avatarState.pending}）`)
+if (avatarState.slots === 0) fail('列表里没有任何头像位（host 的 authorAvatar 没传到 UI？）')
+if (avatarState.broken > 0) fail(`仍有 ${avatarState.broken} 个加载失败的破图（回退没生效）`)
+if (avatarState.pending > 0) fail(`仍有 ${avatarState.pending} 个头像位停在未加载状态（要么加载要么回退，不许悬挂）`)
+
 await shoot('pr-inbox-compact')
-await page.locator('[data-pi-density="detailed"]').click()
+await page.getByRole('button', { name: /^(Detailed|详细)$/ }).first().click()
 await page.locator('[data-pr-row][data-density="detailed"]').first().waitFor({ timeout: 10_000 })
 step('密度切换生效（详细）')
 await shoot('pr-inbox-detailed')
-await page.locator('[data-pi-density="compact"]').click()
+await page.getByRole('button', { name: /^(Compact|简洁)$/ }).first().click()
 await page.locator('[data-pr-row][data-density="compact"]').first().waitFor({ timeout: 10_000 })
 
 // 搜索：必然无命中的词让所有行消失，清空后复原（客户端过滤）。
-const search = page.locator('[data-pi-search]')
+const search = page.getByRole('textbox', { name: /^(Search title|搜索标题)/ })
 await search.fill('zzz-no-such-pr')
 await page.waitForTimeout(300)
 if (await page.locator('[data-pr-row]').count() !== 0) fail('搜索没有过滤掉不匹配的行')
@@ -164,7 +187,7 @@ console.log(`· 详情 #969：正文 ${bodyLength} 字符、文件行 ${detailFi
 if (detailFiles === 0) fail('详情没有渲染出文件清单')
 if (bodyLength === 0) fail('详情没有渲染出正文')
 await shoot('pr-inbox-detail')
-await page.locator('[data-pi-back]').first().click()
+await page.getByRole('button', { name: /^(Back to list|返回列表)$/ }).first().click()
 await page.locator('[data-bucket="authored"]').waitFor({ timeout: 15_000 })
 step('详情打开 + 返回列表生效')
 

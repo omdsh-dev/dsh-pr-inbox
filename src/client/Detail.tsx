@@ -13,6 +13,7 @@
  */
 import { createElement, useMemo } from 'react'
 import type { ReactNode } from 'react'
+import type { Context } from '@deepseek-ai/cordis'
 import {
   Button,
   IconBranchOutlineRegular,
@@ -23,10 +24,40 @@ import {
   PathLabel,
   Tag,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { MarkdownLabels, MarkdownPathImages } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PrDetailComment, PrDetailFile, PrDetailValue } from '../shared/types'
-import { formatAge, formatDate } from './format'
+import { hostRouteUrl } from './api'
+import { Author } from './bits'
+import { avatarUrlOf, formatAge, formatDate } from './format'
 import type { I18n } from './i18n'
+
+/**
+ * PR 正文里的**相对图片** → 由 host 代理的 URL。
+ *
+ * markdown 作者常写 `![x](./docs/a.png)` 或 `/docs/a.png`（相对仓库根）。为什么不让
+ * 客户端直连 raw.githubusercontent.com：**`*.githubusercontent.com` 这条 CDN 在受限
+ * 网络里整体不可达**（实测 curl HTTP 000），直连只会得到破图；走 host 的
+ * `image` 路由则用 `gh`（`api.github.com`）取字节，顺带把**私有仓**也覆盖了。
+ *
+ * 指向别的 host、带协议字面量、含 `..`、或仓库不在 github.com 的，一律返回 undefined——
+ * 保持 alt 文本，绝不猜测。
+ */
+export function resolvePrImage(
+  value: string,
+  ctx: unknown,
+  repo: { host: string, owner: string, name: string },
+  ref: string,
+  cwd: string | undefined,
+): string | undefined {
+  if (repo.host !== 'github.com' || ref === '' || cwd === undefined) return undefined
+  const raw = value.trim()
+  if (raw === '' || raw.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(raw)) return undefined
+  const path = raw.replace(/^\.\//, '').replace(/^\/+/, '')
+  if (path === '' || path.split('/').includes('..')) return undefined
+  const query = new URLSearchParams({ cwd, ref, path })
+  const relative = `plugins/dsh-pr-inbox/image?${query.toString()}`
+  return hostRouteUrl(ctx as never, relative)
+}
 
 /** 文件状态 → 官方 Tag 色调 + 文案键。 */
 const FILE_TONE: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'neutral'> = {
@@ -60,9 +91,10 @@ const REVIEW_KEY: Record<string, string> = {
   PENDING: 'reviewPending',
 }
 
-function Comment({ entry, labels, i18n }: { entry: PrDetailComment, labels: MarkdownLabels, i18n: I18n }) {
+function Comment({ entry, labels, pathImages, i18n }: { entry: PrDetailComment, labels: MarkdownLabels, pathImages: MarkdownPathImages, i18n: I18n }) {
   const { t } = i18n
-  const head: ReactNode[] = [createElement(Tag, { key: 'a', tone: 'quiet' }, entry.author)]
+  const avatar = avatarUrlOf(entry)
+  const head: ReactNode[] = [createElement(Author, { key: 'a', login: entry.author, ...(avatar === undefined ? {} : { avatar }) })]
   if (entry.kind === 'review') {
     const state = entry.reviewState ?? 'COMMENTED'
     head.push(createElement(Tag, { key: 's', tone: REVIEW_TONE[state] ?? 'neutral' }, t(REVIEW_KEY[state] ?? 'reviewCommented')))
@@ -74,6 +106,7 @@ function Comment({ entry, labels, i18n }: { entry: PrDetailComment, labels: Mark
       key: 'b',
       text: entry.body === '' ? t('emptyBody') : entry.body,
       labels,
+      pathImages,
       variant: 'compact',
     }),
   ])
@@ -98,12 +131,16 @@ export interface DetailProps {
   loading: boolean
   error: string | undefined
   i18n: I18n
+  /** host 路由解析与图片代理都需要它们。 */
+  ctx: Context
+  cwd: string | undefined
   onBack: () => void
   onRefresh: () => void
 }
 
-export function Detail({ detail, loading, error, i18n, onBack, onRefresh }: DetailProps) {
+export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefresh }: DetailProps) {
   const { t, tf } = i18n
+  const detailAvatar = detail === undefined ? undefined : avatarUrlOf(detail)
   // labels 必须引用稳定（新 identity 会丢掉 MarkdownText 的流式渲染缓存）。
   const labels = useMemo<MarkdownLabels>(() => ({
     code: {
@@ -113,12 +150,16 @@ export function Detail({ detail, loading, error, i18n, onBack, onRefresh }: Deta
     },
     footnotes: t('footnotes'),
   }), [t])
+  /** 正文里的相对图片按 head 提交改写成 raw URL（见 resolvePrImage 的边界说明）。 */
+  const pathImages = useMemo(() => ({
+    resolve: (value: string): string | undefined =>
+      detail === undefined ? undefined : resolvePrImage(value, ctx, detail.repo, detail.headRef, cwd),
+  }), [ctx, cwd, detail?.repo.host, detail?.repo.owner, detail?.repo.name, detail?.headRef])
 
   const head = createElement('div', { className: 'pi-head' }, [
     createElement(Button, {
       key: 'b', variant: 'ghost', size: 'sm',
       icon: createElement(IconChevronLeftOutlineRegular, {}),
-      'data-pi-back': '',
       'aria-label': t('back'), title: t('back'), onClick: onBack,
     }),
     createElement('span', { key: 't', className: 'pi-detailTitle', title: detail === undefined ? '' : `#${detail.number} ${detail.title}` },
@@ -144,10 +185,10 @@ export function Detail({ detail, loading, error, i18n, onBack, onRefresh }: Deta
     body.push(createElement('div', { key: 'l', className: 'pi-empty' }, t('reading')))
   } else {
     const meta: ReactNode[] = [
-      createElement(Tag, { key: 'a', tone: 'quiet' }, detail.author),
+      createElement(Author, { key: 'a', login: detail.author, ...(detailAvatar === undefined ? {} : { avatar: detailAvatar }) }),
       createElement(Tag, {
         key: 's',
-        tone: detail.mergedAt !== undefined ? 'info' : detail.state === 'open' ? 'outline' : 'neutral',
+        tone: detail.mergedAt !== undefined ? 'info' : detail.state === 'open' ? 'success' : 'neutral',
       }, detail.mergedAt !== undefined ? t('merged') : detail.state === 'open' ? t('open') : t('closed')),
     ]
     if (detail.isDraft) meta.push(createElement(Tag, { key: 'd', tone: 'warning' }, t('draft')))
@@ -172,6 +213,7 @@ export function Detail({ detail, loading, error, i18n, onBack, onRefresh }: Deta
       createElement(MarkdownText, {
         text: detail.body === '' ? t('emptyBody') : detail.body,
         labels,
+        pathImages,
         variant: 'body',
       })))
     if (detail.bodyTruncated) {
@@ -185,7 +227,7 @@ export function Detail({ detail, loading, error, i18n, onBack, onRefresh }: Deta
       body.push(createElement('div', { key: 'te', className: 'pi-empty' }, t('noTimeline')))
     }
     for (const [index, entry] of detail.timeline.entries()) {
-      body.push(createElement(Comment, { key: `${entry.kind}:${entry.createdAt}:${index}`, entry, labels, i18n }))
+      body.push(createElement(Comment, { key: `${entry.kind}:${entry.createdAt}:${index}`, entry, labels, pathImages, i18n }))
     }
     if (detail.timelineTruncated) {
       body.push(createElement('div', { key: 'tt', className: 'pi-notice', 'data-tone': 'warn' }, t('timelineTruncated')))

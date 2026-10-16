@@ -29,6 +29,24 @@ export function formatAge(iso: string, now = Date.now()): string {
   return `${Math.floor(days / 365)} 年前`
 }
 
+/**
+ * 头像 URL（host 的 list / detail 提供 `authorAvatar`）。
+ *
+ * 用结构化读取而不是直接读字段：头像字段由 host 车道并行加入，这里先按「有就渲染、
+ * 没有就只显示名字」处理，两边不必抢同一个类型文件的编辑权。
+ */
+export function avatarUrlOf(value: unknown): string | undefined {
+  const avatar = (value as { authorAvatar?: unknown } | null | undefined)?.authorAvatar
+  return typeof avatar === 'string' && avatar !== '' ? avatar : undefined
+}
+
+/** 是否在最近 `days` 天内动过——列表用它把「刚动过的行」提到第二层色阶。 */
+export function isFresh(iso: string, days = 1, now = Date.now()): boolean {
+  const time = timeOf(iso)
+  if (time === undefined) return false
+  return now - time <= days * DAY
+}
+
 /** 绝对日期（合并时间这类「已经定下来的事实」用日期而不是相对时间）。 */
 export function formatDate(iso: string): string {
   const time = timeOf(iso)

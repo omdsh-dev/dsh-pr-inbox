@@ -48,9 +48,11 @@ echo "实例：$URL"
 STATUS=0
 echo "== ① host 路由 =="
 node "$HERE/scripts/verify-host.mjs" "$URL" "$WORKSPACE" || STATUS=1
-echo "== ② 浏览器级（右栏条目 + 面板渲染）=="
+echo "== ② 浏览器级（右栏条目 + 面板渲染 + 头像解码）=="
 SCREENSHOT_DIR="$SCRATCH" node "$HERE/scripts/mount-check.mjs" "$URL" "$WORKSPACE" "$EXPECT_REPO" || STATUS=1
+echo "== ③ 插件图标（Plugins 页：宿主把 icon.svg 变成图片）=="
+SCREENSHOT_DIR="$SCRATCH" node "$HERE/scripts/verify-icon.mjs" "$URL" dsh-pr-inbox || STATUS=1
 
 kill "$SERVER_PID" 2>/dev/null
-[ "$STATUS" -eq 0 ] && echo "✅ 两项自检全通（截图 $SCRATCH/pr-inbox-panel.png）"
+[ "$STATUS" -eq 0 ] && echo "✅ 三项自检全通（截图在 ${SCRATCH}）"
 exit "$STATUS"
