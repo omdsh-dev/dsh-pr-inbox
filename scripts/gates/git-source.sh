@@ -17,7 +17,7 @@ BASE=${SCRATCH:-${TMPDIR:-/tmp}/dsh-pr-inbox-gates}
 SCRATCH="$BASE/git-source"
 HOME_DIR="$SCRATCH/home"
 WORKSPACE=${1:?用法: scripts/gates/git-source.sh <workspace 路径>——host-ops 需要一个已绑定的 git 仓库}
-BS_VERSION=${BETTER_SIDEBAR_VERSION:-0.26.1}
+BS_VERSION=${BETTER_SIDEBAR_VERSION:-0.28.0}
 
 rm -rf "$SCRATCH"
 mkdir -p "$HOME_DIR" "$SCRATCH"

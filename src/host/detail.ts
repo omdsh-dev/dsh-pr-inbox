@@ -12,7 +12,7 @@
  */
 import { PrInboxError, ghJson } from './gh'
 import { detectRepo, requireAbsoluteCwd } from './repo'
-import type { PrDetailComment, PrDetailFile, PrDetailValue, RepoValue } from '../shared/types'
+import type { PrDetailComment, PrDetailFile, PrDetailValue, PrDetailWarning, RepoValue } from '../shared/types'
 
 /** 文件与时间线各取一页（配合 PR 上的总数给出截断标记）。 */
 const FILES_PAGE = 100
@@ -33,10 +33,13 @@ export function requirePullNumber(value: unknown): number {
   return value
 }
 
-/** 截断文本并如实报告（绝不静默截断）。 */
+/** 截断文本并如实报告（绝不静默截断）。**不切开代理对**（否则尾部会变成 U+FFFD）。 */
 export function capText(text: string, cap = BODY_CAP): { text: string; truncated: boolean } {
   if (text.length <= cap) return { text, truncated: false }
-  return { text: text.slice(0, cap), truncated: true }
+  let end = cap
+  const last = text.charCodeAt(end - 1)
+  if (last >= 0xD800 && last <= 0xDBFF) end -= 1
+  return { text: text.slice(0, end), truncated: true }
 }
 
 interface PullPayload {
@@ -156,14 +159,13 @@ export function normalizeReview(raw: Record<string, unknown>): PrDetailComment |
   }
 }
 
-/** 评论 + review 合成一条按时间升序的时间线。 */
+/** 评论 + review 合成一条按时间升序的时间线。无法解析的时间排到最后（而不是打乱顺序）。 */
 export function mergeTimeline(comments: PrDetailComment[], reviews: PrDetailComment[]): PrDetailComment[] {
-  return [...comments, ...reviews].sort((left, right) => {
-    const l = Date.parse(left.createdAt)
-    const right_ = Date.parse(right.createdAt)
-    if (Number.isNaN(l) || Number.isNaN(right_)) return 0
-    return l - right_
-  })
+  const timeOf = (iso: string): number => {
+    const parsed = Date.parse(iso)
+    return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed
+  }
+  return [...comments, ...reviews].sort((left, right) => timeOf(left.createdAt) - timeOf(right.createdAt))
 }
 
 interface CacheEntry { expires: number; value: PrDetailValue }
@@ -183,17 +185,17 @@ async function loadDetail(repo: RepoValue, number: number): Promise<PrDetailValu
   if (skeleton === undefined) {
     throw new PrInboxError('上游返回的 PR 形状不完整', 'gh-bad-output', 502)
   }
-  const warnings: string[] = []
+  const warnings: PrDetailWarning[] = []
   const [files, comments, reviews] = await Promise.all([
     ghJson<unknown>(['api', '-X', 'GET', `${base}/pulls/${number}/files`, '-f', `per_page=${FILES_PAGE}`])
       .then(raw => (Array.isArray(raw) ? raw as Record<string, unknown>[] : []))
-      .catch((error: unknown) => { warnings.push(`文件清单：${messageOf(error)}`); return [] as Record<string, unknown>[] }),
+      .catch((error: unknown) => { warnings.push(warningOf('files', error)); return [] as Record<string, unknown>[] }),
     ghJson<unknown>(['api', '-X', 'GET', `${base}/issues/${number}/comments`, '-f', `per_page=${COMMENTS_PAGE}`])
       .then(raw => (Array.isArray(raw) ? raw as Record<string, unknown>[] : []))
-      .catch((error: unknown) => { warnings.push(`评论：${messageOf(error)}`); return [] as Record<string, unknown>[] }),
+      .catch((error: unknown) => { warnings.push(warningOf('comments', error)); return [] as Record<string, unknown>[] }),
     ghJson<unknown>(['api', '-X', 'GET', `${base}/pulls/${number}/reviews`, '-f', `per_page=${REVIEWS_PAGE}`])
       .then(raw => (Array.isArray(raw) ? raw as Record<string, unknown>[] : []))
-      .catch((error: unknown) => { warnings.push(`review：${messageOf(error)}`); return [] as Record<string, unknown>[] }),
+      .catch((error: unknown) => { warnings.push(warningOf('reviews', error)); return [] as Record<string, unknown>[] }),
   ])
 
   const normalizedFiles = files.map(normalizeFile).filter((file): file is PrDetailFile => file !== undefined)
@@ -216,6 +218,12 @@ async function loadDetail(repo: RepoValue, number: number): Promise<PrDetailValu
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/** 支线失败 → 可本地化的结构（分区名由客户端翻译，错误码让客户端挑人话）。 */
+function warningOf(part: PrDetailWarning['part'], error: unknown): PrDetailWarning {
+  const code = error instanceof PrInboxError && error.code !== '' ? error.code : undefined
+  return { part, ...(code === undefined ? {} : { code }), message: messageOf(error) }
 }
 
 /** `detail`：给定 cwd + PR 编号，取回面板渲染所需的全部内容（有界 + 缓存）。 */

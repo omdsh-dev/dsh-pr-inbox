@@ -19,6 +19,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { PrInboxError, ghJson, runGhBuffer } from './gh'
 import { detectRepo, requireAbsoluteCwd } from './repo'
+import { isSameOrigin } from './trust'
 import type { RepoValue } from '../shared/types'
 
 export const IMAGE_PATH = '/plugins/dsh-pr-inbox/image'
@@ -56,13 +57,18 @@ export function imageMimeFor(path: string): string | undefined {
   return MIME_BY_EXT[path.slice(dot + 1).toLowerCase()]
 }
 
-/** 仓库内相对路径：空串 / 绝对 / 任何一段 `.`/`..` / NUL / 超长一律 400。 */
+/** 仓库内相对路径：空串 / 绝对 / 任何一段 `.`/`..` / NUL / 超长一律 400。
+ *  另外拒绝 `?`/`#`/反斜杠/控制字符与**百分号编码的** dot/slash（`%2e` 等）：
+ *  这条字符串会原样拼进 `gh api .../contents/<path>`，词法层必须比调用方更严。 */
 export function requireRepoPath(value: unknown): string {
   if (typeof value !== 'string' || value === '' || value.length > MAX_PATH_LENGTH) {
     throw new PrInboxError('需要仓库内相对路径', 'bad-request', 400)
   }
-  if (value.includes('\0') || value.startsWith('/')) {
+  if (value.startsWith('/') || /[?#\\\u0000-\u001f]/.test(value)) {
     throw new PrInboxError('路径必须是仓库内相对路径', 'bad-request', 400)
+  }
+  if (/%(?:2e|2f|5c)/i.test(value)) {
+    throw new PrInboxError('路径里不允许编码后的 `.` / `/` / `\\`', 'bad-request', 400)
   }
   const segments = value.split('/')
   if (segments.some(segment => segment === '' || segment === '.' || segment === '..')) {
@@ -123,6 +129,26 @@ const cache = new Map<string, { expires: number; mime: string; bytes: Buffer }>(
 const inflight = new Map<string, Promise<{ mime: string; bytes: Buffer }>>()
 let cacheBytes = 0
 
+/** cwd → 仓库身份的短缓存：一篇正文里的 N 张图只跑一次 `git`（detectRepo 是 2–3 个子进程）。
+ *  **不缓存失败**：工作区可能刚刚才绑定好。 */
+const REPO_TTL_MS = 60_000
+const REPO_CACHE_MAX = 32
+const repoCache = new Map<string, { expires: number; repo: RepoValue }>()
+
+async function detectRepoCached(cwd: string, now: number): Promise<RepoValue | undefined> {
+  const hit = repoCache.get(cwd)
+  if (hit !== undefined && hit.expires > now) return hit.repo
+  const repo = await detectRepo(cwd)
+  if (repo === undefined) return undefined
+  repoCache.set(cwd, { expires: now + REPO_TTL_MS, repo })
+  while (repoCache.size > REPO_CACHE_MAX) {
+    const oldest = repoCache.keys().next().value
+    if (oldest === undefined) break
+    repoCache.delete(oldest)
+  }
+  return repo
+}
+
 function cacheTake(key: string, now: number): { mime: string; bytes: Buffer } | undefined {
   const hit = cache.get(key)
   if (hit === undefined) return undefined
@@ -154,6 +180,7 @@ export function resetImageCache(): void {
   cache.clear()
   inflight.clear()
   cacheBytes = 0
+  repoCache.clear()
 }
 
 /** 先问大小（超上限不下载字节），再走 raw 读字节，最后魔数确认。 */
@@ -185,7 +212,7 @@ export async function resolveImage(cwdRaw: unknown, refRaw: unknown, pathRaw: un
   const cwd = requireAbsoluteCwd(cwdRaw)
   const ref = requireRef(refRaw)
   const path = requireRepoPath(pathRaw)
-  const repo: RepoValue | undefined = await detectRepo(cwd)
+  const repo: RepoValue | undefined = await detectRepoCached(cwd, Date.now())
   if (repo === undefined) {
     throw new PrInboxError('当前工作区没有可识别的 forge 项目', 'no-repo', 404)
   }
@@ -221,14 +248,25 @@ export async function imageHandler(req: IncomingMessage, res: ServerResponse): P
       sendJson(res, 405, { ok: false, error: { code: 'method-not-allowed', message: '只用 GET' } })
       return
     }
+    if (!isSameOrigin(req)) {
+      sendJson(res, 403, { ok: false, error: { code: 'forbidden', message: '跨站请求被拒绝' } })
+      return
+    }
     const url = new URL(req.url ?? '/', 'http://dsh.internal')
     const value = await resolveImage(url.searchParams.get('cwd'), url.searchParams.get('ref'), url.searchParams.get('path'))
-    res.writeHead(200, {
+    const headers: Record<string, string> = {
       'content-type': value.mime,
       'content-length': String(value.bytes.length),
       'cache-control': 'private, max-age=300',
       'x-content-type-options': 'nosniff',
-    })
+    }
+    // SVG 是唯一「能以图片身份携带脚本」的类型：<img> 里不执行，但右键
+    // 「在新标签页打开图片」会变成同源顶层文档。sandbox + default-src 'none'
+    // 让顶层文档也没有脚本与外部请求（图片子资源不受 CSP 影响）。
+    if (value.mime === 'image/svg+xml') {
+      headers['content-security-policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    }
+    res.writeHead(200, headers)
     res.end(req.method === 'HEAD' ? undefined : value.bytes)
   } catch (error) {
     if (error instanceof PrInboxError) {

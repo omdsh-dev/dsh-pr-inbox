@@ -5,16 +5,16 @@
  * `ctx.betterSidebar` 的类型合并——运行时符号一律走 `ctx.betterSidebar` 方法调用，
  * 不 value-import 宿主插件。
  *
- * 文案经宿主 locale 服务（`createI18n`），图标用官方 `IconBranchOutlineRegular`
- * （primitives 里没有 PR 专用图标，分支是语义最近的一个）。
+ * 文案经宿主 locale 服务（`createI18n`），图标用本插件自己的 `PrIcon`
+ * （primitives 里没有 PR 专用图标；分支图标会和内置 Git 页签撞语义）。
  */
 import { createElement } from 'react'
 import type {} from 'dsh-better-sidebar'
 import type { Context } from '@deepseek-ai/cordis'
-import { IconBranchOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Panel } from './Panel'
 import { createI18n } from './i18n'
 import { injectStyles } from './styles'
+import { PrIcon } from './tab-icon'
 
 /** 服务依赖：只等 better-sidebar 就绪（tab 宿主）。
  *  locale 不写进 inject —— 它是可选增强，`createI18n` 用 `ctx.get('locale')` 结构化探测，
@@ -33,7 +33,7 @@ export function apply(ctx: Context): void {
       id: TAB_ID,
       title: () => i18n.t('tabTitle'),
       description: () => i18n.t('tabDescription'),
-      icon: (size: number) => createElement(IconBranchOutlineRegular, { size }),
+      icon: (size: number) => createElement(PrIcon, { size }),
       order: 25,
       dedupeKey: () => TAB_ID,
       component: ({ scope, visible }) => createElement(Panel, {

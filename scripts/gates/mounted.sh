@@ -18,7 +18,7 @@ SCRATCH="$BASE/mounted"
 HOME_DIR="$SCRATCH/home"
 WORKSPACE=${1:?用法: scripts/gates/mounted.sh <workspace 路径> [期望的 owner/repo]——需要一个已绑定的 git 仓库路径}
 EXPECT_REPO=${2:-}
-BS_VERSION=${BETTER_SIDEBAR_VERSION:-0.26.1}
+BS_VERSION=${BETTER_SIDEBAR_VERSION:-0.28.0}
 PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-$SCRATCH/browsers}
 export PLAYWRIGHT_BROWSERS_PATH
 

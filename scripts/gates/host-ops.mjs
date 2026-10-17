@@ -86,16 +86,21 @@ try {
   const bucketErrors = keys.filter(key => buckets[key]?.error !== undefined)
   check(bucketErrors.length === 0, `桶内取数失败：${bucketErrors.map(key => `${key}: ${buckets[key].error.message}`).join(' | ')}`)
   const authoredNumbers = (buckets?.authored?.rows ?? []).map(row => row.number)
+  const mergedNumbers = (buckets?.merged?.rows ?? []).map(row => row.number)
+  const reviewNumbers = (buckets?.review?.rows ?? []).map(row => row.number)
+  const allNumbers = [...authoredNumbers, ...mergedNumbers, ...reviewNumbers]
   const mergedTotal = buckets?.merged?.total ?? 0
-  check(mergedTotal > 0, '最近合并桶 total 为 0（真实仓库不该如此）')
+  check(allNumbers.length > 0, '三桶一行数据都没有（真实仓库不该如此）')
   console.log(`✅ list：authored total=${buckets?.authored?.total ?? '?'} 行=${buckets?.authored?.rows?.length ?? 0}` +
-    `（含 #969=${authoredNumbers.includes(969)}）· review total=${buckets?.review?.total ?? '?'}` +
-    ` · merged total=${mergedTotal} 行=${buckets?.merged?.rows?.length ?? 0}`)
+    ` · review total=${buckets?.review?.total ?? '?'} · merged total=${mergedTotal} 行=${buckets?.merged?.rows?.length ?? 0}` +
+    `（三桶任一行可用；含 #969=${allNumbers.includes(969)}）`)
 
   // ── ③ detail：正文 / 时间线 / 文件 ───────────────────────────────────────
-  const target = authoredNumbers.includes(969) ? 969 : authoredNumbers[0]
+  // 数据在工作区里会变（#969 可能已从 authored 进 merged），所以从**任意桶**取目标，
+  // 只在三桶都空时才判失败。这个门证明的是 detail 链路，不是某个固定 PR 的状态。
+  const target = allNumbers.includes(969) ? 969 : allNumbers[0]
   if (target === undefined) {
-    check(false, '没有任何 authored 行可用于详情自检')
+    check(false, '三桶一行数据都没有，无法做详情自检')
   } else {
     const detail = await call('detail', { number: target })
     show('detail', detail.body)

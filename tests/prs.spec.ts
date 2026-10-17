@@ -73,11 +73,15 @@ describe('bucketQueries', () => {
     expect(buckets.map(bucket => bucket.key)).toEqual(['authored', 'review', 'merged'])
     expect(buckets[0]!.q).toBe('repo:omdsh-dev/DSH-better-sidebar is:pr is:open author:@me')
     expect(buckets[1]!.q).toBe('repo:omdsh-dev/DSH-better-sidebar is:pr is:open review-requested:@me')
-    expect(buckets[2]!.q).toBe('repo:omdsh-dev/DSH-better-sidebar is:pr is:merged')
+    expect(buckets[2]!.q).toBe('repo:omdsh-dev/DSH-better-sidebar is:pr is:merged author:@me')
   })
 
   it('caps the merged bucket at the agreed 20 rows', () => {
     expect(bucketQueries(REPO.fullName)[2]!.limit).toBe(20)
+  })
+
+  it('limits the merged bucket to PRs the user merged (the "did my work land" question)', () => {
+    expect(bucketQueries(REPO.fullName)[2]!.q).toContain('author:@me')
   })
 })
 
@@ -187,7 +191,7 @@ describe('listOp', () => {
   })
 
   it('contract: a bucket error is per-bucket data, never a thrown list', async () => {
-    routeGhJson(q => (q.includes('author:@me') ? new Error('gh 命令超时') : undefined))
+    routeGhJson(q => (q.includes('is:open author:@me') ? new Error('gh 命令超时') : undefined))
     const value = await listOp({ cwd: '/w/repo' })
     expect(value.buckets.authored.error?.message).toContain('超时')
     expect(value.buckets.authored.total).toBe(0)
@@ -197,7 +201,7 @@ describe('listOp', () => {
   })
 
   it('never caches a failure', async () => {
-    routeGhJson(q => (q.includes('author:@me') ? new Error('boom') : undefined))
+    routeGhJson(q => (q.includes('is:open author:@me') ? new Error('boom') : undefined))
     await listOp({ cwd: '/w/repo' })
     await listOp({ cwd: '/w/repo' })
     // 失败那条重试了；成功的两条走缓存。合计 = 3 + 1。

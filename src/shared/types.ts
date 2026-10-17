@@ -20,6 +20,8 @@ export interface RepoValue {
   fullName: string
   remoteUrl: string
   root: string
+  /** 绑定用的 remote 名（`upstream` / `origin` / 其它）；旧数据可能没有该键。 */
+  remoteName?: string
 }
 
 export interface StatusValue {
@@ -76,6 +78,13 @@ export interface PrDetailFile {
   previousPath?: string
 }
 
+/** 详情里一条支线失败：`part` 用于本地化的分区名，`code` 让客户端把已知错误翻成当前语言。 */
+export interface PrDetailWarning {
+  part: 'files' | 'comments' | 'reviews'
+  code?: string
+  message: string
+}
+
 /** 详情时间线上的一条（issue 评论或一次 review）。 */
 export interface PrDetailComment {
   kind: 'comment' | 'review'
@@ -126,7 +135,7 @@ export interface PrDetailValue {
   filesTruncated: boolean
   timeline: PrDetailComment[]
   timelineTruncated: boolean
-  /** 支线失败的人话（每条形如「评论：…」）；为空表示全都取到了。 */
-  warnings: string[]
+  /** 支线失败（分区 + 错误码 + 原始信息）；为空表示全都取到了。 */
+  warnings: PrDetailWarning[]
   fetchedAt: string
 }

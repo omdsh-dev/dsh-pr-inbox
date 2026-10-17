@@ -54,7 +54,11 @@ describe('词法闸门', () => {
     for (const good of ['icon.svg', 'docs/img/a b.png', 'a/b/c.webp', '.github/logo.png']) {
       expect(requireRepoPath(good), good).toBe(good)
     }
-    for (const bad of ['', '/abs.png', 'a/../b.png', '..', 'a//b.png', 'a/./b.png', 'x'.repeat(513), null, 42, undefined]) {
+    for (const bad of [
+      '', '/abs.png', 'a/../b.png', '..', 'a//b.png', 'a/./b.png', 'x'.repeat(513), null, 42, undefined,
+      // 编码后的 dot/slash 与查询/片段/反斜杠：这些会原样拼进 gh api 的 URL。
+      'a%2e%2e/b.png', 'a%2fb.png', 'a%5cb.png', 'a?ref=x', 'a#frag', 'a\\b.png',
+    ]) {
       expect(() => requireRepoPath(bad), String(bad)).toThrow(PrInboxError)
     }
     expect(() => requireRepoPath('a/../b.png')).toThrowError(/`\.\.`/)
@@ -166,6 +170,13 @@ describe('resolveImage', () => {
     expect(mocks.ghJson).toHaveBeenCalledTimes(2)
   })
 
+  it('reuses the repo detection across images in the same document', async () => {
+    mocks.detectRepo.mockClear()
+    await resolveImage(CWD, 'dev', 'a.png')
+    await resolveImage(CWD, 'dev', 'b.png')
+    expect(mocks.detectRepo).toHaveBeenCalledTimes(1)
+  })
+
   it('never caches a failure', async () => {
     mocks.ghJson.mockRejectedValueOnce(new PrInboxError('HTTP 404', 'not-found', 404))
     await expect(resolveImage(CWD, 'dev', 'icon.png')).rejects.toMatchObject({ status: 404 })
@@ -185,13 +196,13 @@ describe('resolveImage', () => {
 })
 
 describe('imageHandler', () => {
-  const call = async (method: string, url: string) => {
+  const call = async (method: string, url: string, headers: Record<string, string> = {}) => {
     const out = { status: 0, headers: {} as Record<string, string>, body: undefined as unknown }
     const res = {
       writeHead(status: number, headers: Record<string, string>) { out.status = status; out.headers = headers; return res },
       end(chunk?: unknown) { out.body = chunk },
     }
-    const req = { method, url } as unknown as IncomingMessage
+    const req = { method, url, headers } as unknown as IncomingMessage
     await imageHandler(req, res as unknown as ServerResponse)
     return out
   }
@@ -212,6 +223,27 @@ describe('imageHandler', () => {
     const out = await call('GET', `${IMAGE_PATH}?${query}`)
     expect(out.status).toBe(400)
     expect(JSON.parse(String(out.body))).toMatchObject({ ok: false, error: { code: 'bad-request' } })
+  })
+
+  it('sandboxes SVG responses (image-in-<img> is safe, top-level navigation must not run script)', async () => {
+    mocks.ghJson.mockResolvedValue({ size: SVG.length })
+    mocks.runGhBuffer.mockResolvedValue(SVG)
+    const query = new URLSearchParams({ cwd: CWD, ref: 'dev', path: 'icon.svg' })
+    const out = await call('GET', `${IMAGE_PATH}?${query}`)
+    expect(out.status).toBe(200)
+    expect(out.headers['content-type']).toBe('image/svg+xml')
+    expect(out.headers['content-security-policy']).toContain('sandbox')
+    expect(out.headers['content-security-policy']).toContain("default-src 'none'")
+    // 非 SVG 不需要（也不该）带这条头。
+    const png = await call('GET', `${IMAGE_PATH}?${new URLSearchParams({ cwd: CWD, ref: 'dev', path: 'icon.png' })}`)
+    expect(png.headers['content-security-policy']).toBeUndefined()
+  })
+
+  it('rejects a cross-site Origin before touching gh', async () => {
+    const query = new URLSearchParams({ cwd: CWD, ref: 'dev', path: 'icon.png' })
+    const out = await call('GET', `${IMAGE_PATH}?${query}`, { origin: 'http://evil.example', host: '127.0.0.1:3080' })
+    expect(out.status).toBe(403)
+    expect(mocks.ghJson).not.toHaveBeenCalled()
   })
 
   it('refuses anything but GET / HEAD', async () => {

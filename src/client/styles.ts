@@ -70,7 +70,6 @@ const CSS = `
 }
 /* 「待我审」有货时计数取警告色：这是面板里唯一「需要你动作」的信号。 */
 .pi-sectionCount[data-attention='true'] { color: var(--dsw-alias-state-warn-primary); }
-.pi-hint { flex: none; margin-left: auto; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
 .pi-chevron { flex: none; display: inline-flex; color: var(--dsw-alias-label-tertiary); transition: transform 120ms var(--ds-ease-in-out); }
 .pi-section[data-open='false'] .pi-chevron { transform: rotate(-90deg); }
 .pi-section[data-open='false'] .pi-rows { display: none; }
@@ -84,9 +83,8 @@ const CSS = `
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 4px 10px 5px 12px;
+  padding: 4px 10px 4px 12px;
   cursor: pointer;
-  animation: pi-row-in 150ms var(--ds-ease-in-out);
 }
 .pi-row + .pi-row { border-top: 0.5px solid var(--dsw-alias-border-l2); }
 .pi-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
@@ -127,10 +125,6 @@ const CSS = `
 .pi-row:hover .pi-external, .pi-row:focus-within .pi-external { opacity: 1; pointer-events: auto; }
 @media (hover: none) {
   .pi-row .pi-external { opacity: 1; pointer-events: auto; }
-}
-@keyframes pi-row-in { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  .pi-row { animation: none; }
 }
 .pi-num {
   flex: none;
@@ -192,7 +186,10 @@ const CSS = `
 .pi-footMeta { margin-left: auto; flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* ── 详情（正文与评论排版交给官方 MarkdownText，这里只管骨架）──────────── */
-.pi-detail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+/* 详情和列表共用「内容 + 状态行」的列布局：详情吃满剩余高度，footer 常驻。 */
+.pi-detail { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* 打开详情时焦点会程序化落到这个区域（键盘用户不丢位置）；整块描边没有信息量。 */
+.pi-detail:focus { outline: none; }
 .pi-detailTitle {
   flex: 1;
   min-width: 0;
@@ -225,7 +222,8 @@ const CSS = `
   align-items: center;
   justify-content: center;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--dsw-font-xxxs-strong-11, 11px);
+  /* 这是一段 font shorthand 令牌，不能拿来做 font-size（会整体失效回退到 11px）。 */
+  font-size: 11px;
   font-weight: 500;
   line-height: 1;
   overflow: hidden;
@@ -288,7 +286,6 @@ const CSS = `
   padding: 0 8px;
   border-radius: var(--dsw-radius-sm);
 }
-.pi-file:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .pi-fileOld { flex: none; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); text-decoration: line-through; }
 .pi-filePath { flex: 1; min-width: 0; }
 .pi-fileCounts { flex: none; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); font-variant-numeric: tabular-nums; }

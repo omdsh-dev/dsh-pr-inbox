@@ -57,7 +57,7 @@ git push origin v0.1.0
 
 ```bash
 gh repo edit vlln/dsh-pr-inbox \
-  --description "把与你相关的 GitHub PR（我提的 / 待我审 / 最近合并）照进 DSH 侧边栏，复用本机 gh 登录，只读（DeepSeek Harness 插件）" \
+  --description "把与你相关的 GitHub PR（我提的 / 待我审 / 我合并的）照进 DSH 侧边栏，复用本机 gh 登录，只读（DeepSeek Harness 插件）" \
   --add-topic dsh-plugin --add-topic deepseek-harness \
   --add-topic pull-request --add-topic github --add-topic sidebar
 ```
@@ -108,5 +108,5 @@ gh api graphql -f query='{ repository(owner: "deepseek-ai", name: "deepseek-harn
 - 只支持 `github.com`（其它 host：列表回 `note`、详情回 `unsupported-host/501`）
 - 只读：没有任何写操作，也不接管聊天里的 GitHub 链接
 - 需要本机 `gh` 已登录（凭据不进插件、不进设置、不进模型上下文——有意的取舍）
-- `最近合并` 是最近 20 条，不是时间窗；搜索只在已加载的行里做
+- `我合并的` 是最近 20 条，不是时间窗（展示按合并时间倒序）；搜索只在已加载的行里做
 - 深色已机械验证并留了截图；**图标观感与窄侧栏**仍需人工目视（见 engineering-notes §5）

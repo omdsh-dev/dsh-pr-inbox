@@ -6,13 +6,16 @@
  * 「URL 存在且加载成功 → 显示图片；失败/缺失 → 用首字母圆底占位」，任何情况下都不会
  * 把浏览器的破图图标露给用户。
  */
-import { createElement, useState } from 'react'
+import { createElement, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { formatAge, isFresh } from './format'
+import { ageText, isFresh } from './format'
+import type { Translate } from './format'
 
 /** 16px 圆头像；加载失败或没有 URL 时回退成首字母（同一几何，视觉上不跳）。 */
 export function Avatar({ login, url }: { login: string, url?: string }) {
   const [failed, setFailed] = useState(false)
+  // 换 PR / 换评论时 url 会变：上一张的失败状态不能继续压着新头像。
+  useEffect(() => { setFailed(false) }, [url])
   if (url === undefined || failed) {
     return createElement('span', {
       className: 'pi-avatar pi-avatarInitials',
@@ -48,9 +51,9 @@ export function Author({ login, avatar, href, withAvatar = true }: { login: stri
 }
 
 /** 相对时间；24h 内动过的行取第二层色阶（`.pi-meta[data-fresh]`）。 */
-export function Age({ iso }: { iso: string }) {
+export function Age({ iso, tf }: { iso: string, tf: Translate }) {
   return createElement('span', {
     className: 'pi-meta',
     'data-fresh': isFresh(iso) ? 'true' : undefined,
-  }, formatAge(iso))
+  }, ageText(tf, iso))
 }

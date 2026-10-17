@@ -103,6 +103,13 @@ describe('capText', () => {
     expect(capText('abc', 10)).toEqual({ text: 'abc', truncated: false })
     expect(capText('abcdef', 3)).toEqual({ text: 'abc', truncated: true })
   })
+
+  it('never splits a surrogate pair at the cut point', () => {
+    // 'a' + 😀（代理对）+ 'b'；cap=2 会落在高代理项后面，必须退一格。
+    const text = `a😀b`
+    expect(capText(text, 2)).toEqual({ text: 'a', truncated: true })
+    expect(capText(`a😀`, 2)).toEqual({ text: 'a', truncated: true })
+  })
 })
 
 describe('normalizePull', () => {
@@ -264,7 +271,8 @@ describe('detailOp', () => {
   it('degrades per branch: a failing comments read leaves the rest intact', async () => {
     routeGh(url => (url.includes('/issues/') ? new Error('API rate limit exceeded') : undefined))
     const value = await detailOp({ cwd: '/w/repo', number: 969 })
-    expect(value.warnings.join(' ')).toContain('rate limit')
+    expect(value.warnings.map(warning => `${warning.part}:${warning.message}`).join(' ')).toContain('comments')
+    expect(value.warnings.map(warning => warning.message).join(' ')).toContain('rate limit')
     expect(value.files).toHaveLength(3)
     expect(value.timeline.map(row => row.kind)).toEqual(['review', 'review'])
   })

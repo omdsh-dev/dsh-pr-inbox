@@ -10,6 +10,7 @@
  * 同时落一张截图供**视觉验收**（本 Agent 看不到图像，视觉结论要人看）。
  */
 import { loadPlaywright } from './lib/playwright.mjs'
+import { dismissOnboarding } from './lib/onboarding.mjs'
 
 const [launchUrl, pkg = 'dsh-pr-inbox'] = process.argv.slice(2)
 if (launchUrl === undefined) {
@@ -25,18 +26,8 @@ const errors = []
 page.on('pageerror', error => errors.push(String(error)))
 await page.goto(launchUrl, { waitUntil: 'domcontentloaded' })
 await page.locator('#root > *').first().waitFor({ timeout: 90_000 })
-// keyless 引导弹层（版本提示 / provider 配置）会盖住整屏并吞掉点击：先等它出现再关。
-const dismissible = page.getByRole('button', { name: /^(Continue|Configure later|继续|稍后配置)$/ })
-for (let attempt = 0; attempt < 120 && await dismissible.count() === 0; attempt++) await page.waitForTimeout(500)
-for (let round = 0; round < 10; round++) {
-  let dismissed = false
-  for (const name of ['Continue', 'Configure later', '继续', '稍后配置']) {
-    const button = page.getByRole('button', { name, exact: true }).first()
-    if (await button.count() === 0) continue
-    try { await button.click({ timeout: 3_000 }); dismissed = true; await page.waitForTimeout(600) } catch { /* masked; retry */ }
-  }
-  if (!dismissed) break
-}
+// keyless 引导 / desktop onboarding 会把整屏盖住并吞掉点击：先关掉它。
+await dismissOnboarding(page)
 for (let attempt = 0; attempt < 60; attempt++) {
   const count = await page.getByRole('button', { name: /^(Plugins|插件)$/ }).count()
   if (count > 0) break

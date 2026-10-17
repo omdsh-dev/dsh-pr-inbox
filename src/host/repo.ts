@@ -21,6 +21,8 @@ export interface RemoteIdentity {
 
 export interface RepoIdentity extends RemoteIdentity {
   remoteUrl: string
+  /** 绑定用的 remote 名（`upstream` / `origin` / 其它）。 */
+  remoteName?: string
   /** 仓库根（`rev-parse --show-toplevel` 的原样输出）。 */
   root: string
   /** `owner/name`，UI 与 gh 参数都用它。 */
@@ -95,28 +97,38 @@ export async function detectRepo(cwd: string): Promise<RepoIdentity | undefined>
   } catch {
     return undefined
   }
-  const remoteUrl = await originRemote(cwd)
-  if (remoteUrl === undefined) return undefined
-  const identity = parseRemoteUrl(remoteUrl)
+  const remote = await preferredRemote(cwd)
+  if (remote === undefined) return undefined
+  const identity = parseRemoteUrl(remote.url)
   if (identity === undefined) return undefined
-  return { ...identity, remoteUrl, root, fullName: `${identity.owner}/${identity.name}` }
+  return { ...identity, remoteName: remote.name, remoteUrl: remote.url, root, fullName: `${identity.owner}/${identity.name}` }
 }
 
-/** `remote.origin.url` 优先；没有 origin 就取第一个 remote（多 remote 仓库的常见形态）。 */
-async function originRemote(cwd: string): Promise<string | undefined> {
+/**
+ * 绑定用哪个 remote：**`upstream` 优先**（fork 布局：origin = 自己的 fork，
+ * upstream = 主仓），其次 `origin`，最后按名字取第一个。
+ *
+ * 为什么不是 origin 优先：开源贡献者 checkout 的 origin 通常是自己 fork，
+ * 绑到 fork 会让 `author:@me` / `review-requested:@me` 看不到主仓的 PR——那恰好
+ * 是这个面板最常用的场景。
+ */
+export async function preferredRemote(cwd: string): Promise<{ name: string; url: string } | undefined> {
+  let names: string[]
   try {
-    const url = (await gitOut(cwd, ['config', '--get', 'remote.origin.url'])).trim()
-    if (url !== '') return url
-  } catch {
-    // 没有 origin 不算错误，继续看其它 remote。
-  }
-  try {
-    const remotes = (await gitOut(cwd, ['remote'])).split('\n').map(line => line.trim()).filter(Boolean)
-    const first = remotes[0]
-    if (first === undefined) return undefined
-    const url = (await gitOut(cwd, ['config', '--get', `remote.${first}.url`])).trim()
-    return url === '' ? undefined : url
+    names = (await gitOut(cwd, ['remote'])).split('\n').map(line => line.trim()).filter(Boolean)
   } catch {
     return undefined
   }
+  if (names.length === 0) return undefined
+  const rank = (name: string): number => (name === 'upstream' ? 0 : name === 'origin' ? 1 : 2)
+  const ordered = [...names].sort((left, right) => rank(left) - rank(right))
+  for (const name of ordered) {
+    try {
+      const url = (await gitOut(cwd, ['config', '--get', `remote.${name}.url`])).trim()
+      if (url !== '') return { name, url }
+    } catch {
+      // 这个 remote 没有 url，试下一个。
+    }
+  }
+  return undefined
 }

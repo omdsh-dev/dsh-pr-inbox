@@ -1,2 +1,4 @@
 minimumReleaseAgeExclude:
-  - dsh-better-sidebar@0.26.1
+  - dsh-better-sidebar@0.28.0
+  - '@deepseek-ai/cosmokit@1.8.6'
+  - '@deepseek-ai/schemastery@3.18.5'

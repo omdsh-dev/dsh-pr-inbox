@@ -15,6 +15,7 @@
  * 因此渲染，原生右栏的入口才存在（与 better-sidebar 挂载 lane 同一手法）。
  */
 import { loadPlaywright } from './lib/playwright.mjs'
+import { dismissOnboarding } from './lib/onboarding.mjs'
 
 const [launchUrl, workspacePath, expectRepo] = process.argv.slice(2)
 if (launchUrl === undefined || workspacePath === undefined) {
@@ -69,20 +70,9 @@ const pageErrors = []
 page.on('pageerror', error => pageErrors.push(String(error)))
 await page.goto(launchUrl, { waitUntil: 'domcontentloaded' })
 await page.locator('#root > *').first().waitFor({ timeout: 90_000 })
-// 引导弹层在设置加入解析之后才挂载（可能晚好几秒），所以**先等它出现**再关：
-// 只关「稍后 / Continue」这类可跳过的；"Save and continue" 需要 API key，不能点。
-const dismissible = page.getByRole('button', { name: /^(Continue|Configure later|继续|稍后配置)$/ })
-for (let attempt = 0; attempt < 120 && await dismissible.count() === 0; attempt++) await page.waitForTimeout(500)
-for (let round = 0; round < 10; round++) {
-  let dismissed = false
-  for (const name of ['Continue', 'Configure later', '继续', '稍后配置']) {
-    const button = page.getByRole('button', { name, exact: true }).first()
-    if (await button.count() === 0) continue
-    try { await button.click({ timeout: 3_000 }); dismissed = true; await page.waitForTimeout(600) } catch { /* masked; retry */ }
-  }
-  if (!dismissed) break
-}
-step('已关掉 keyless 引导弹层')
+// 引导弹层在设置加入解析之后才挂载（可能晚好几秒），所以**先等它出现**再关。
+await dismissOnboarding(page)
+step('已关掉首次启动引导弹层（如果有）')
 
 // ── 4) 让会话有内容（原生右栏的入口只在有内容的会话头里出现）─────────────────
 const composer = page.getByRole('textbox', { name: /Describe what you want to build|描述你想要构建/ })
@@ -141,6 +131,18 @@ const text = (await panel.first().innerText()).replace(/\s+/g, ' ').trim()
 console.log(`· 三桶行数：${JSON.stringify(perBucket)}`)
 console.log(`· 面板文本：${text.slice(0, 360)}`)
 if (rows === 0) fail('三桶一行数据都没有（gh 取数或渲染失败）')
+
+// i18n 回归门：英文宿主下，面板 chrome（顶栏 / 分区头 / 状态行）不得出现中文
+// 时间或中文提示。PR 标题/标签可以是中文，所以只取 chrome，不扫整块面板。
+const chromeText = (await page.evaluate(() => {
+  const pick = (selector) => [...document.querySelectorAll(selector)].map(node => node.textContent ?? '').join(' ')
+  return [pick('.pi-head'), pick('.pi-sectionHeader'), pick('.pi-foot')].join(' ')
+})).replace(/\s+/g, ' ').trim()
+const englishChrome = /Authored by me|Needs my review|Merged by me/.test(chromeText)
+if (englishChrome && /分钟前|小时前|天前|个月前|年前|刚刚|更新于/.test(chromeText)) {
+  fail(`英文宿主下 chrome 里出现了中文文案：${chromeText.slice(0, 240)}`)
+}
+console.log(`· 语言：${englishChrome ? '英文 chrome 无中文时间/提示' : '非英文宿主，跳过 chrome 断言'}`)
 
 // 头像渲染（图片渲染的第一条证据）：这个环境的 *.githubusercontent.com 不可达，
 // 所以设计语义是「能加载就显示图片，失败就用首字母圆底」——断言的是**不出现破图**
@@ -277,7 +279,7 @@ await page.locator('[data-pr-row][data-density="compact"]').first().waitFor({ ti
 
 // 分区头贴顶：长列表里滚动时，当前分区的头必须钉在滚动口上沿。
 // 这份数据只有 ~1.2 屏高，天然滚不到「头带本该被顶住」的位置，所以把滚动口临时
-// 压矮到 160px——**只改这一个内联样式、测完立刻还原**，让这个几何事实真的可测。
+// 压矮到 80px——**只改这一个内联样式、测完立刻还原**，让这个几何事实真的可测。
 // （若 sticky 没生效，头会随内容一起被滚出视野，必然与上沿差出几十像素。）
 const sticky = await page.evaluate(async () => {
   const scroller = document.querySelector('.pi-body')
@@ -287,7 +289,7 @@ const sticky = await page.evaluate(async () => {
   const naturalOverflow = scroller.scrollHeight > scroller.clientHeight + 40
   const restore = { height: scroller.style.height, flex: scroller.style.flex }
   scroller.style.flex = 'none'
-  scroller.style.height = '160px'
+  scroller.style.height = '80px'
   await raf()
   const top = () => scroller.getBoundingClientRect().top
   const read = () => ({ scrollTop: Math.round(scroller.scrollTop), scrollerTop: Math.round(top()), headerTop: Math.round(header.getBoundingClientRect().top) })
@@ -304,7 +306,7 @@ const sticky = await page.evaluate(async () => {
   return { naturalOverflow, mid, end }
 })
 if (sticky === null) fail('找不到滚动体或分区头，无法验证贴顶')
-console.log(`· 分区头贴顶：滚动口压到 160px 后，滚 ${sticky.mid.scrollTop}px 头 y=${sticky.mid.headerTop}（口 ${sticky.mid.scrollerTop}）· 滚到底 头 y=${sticky.end.headerTop}（口 ${sticky.end.scrollerTop}）`)
+console.log(`· 分区头贴顶：滚动口压到 80px 后，滚 ${sticky.mid.scrollTop}px 头 y=${sticky.mid.headerTop}（口 ${sticky.mid.scrollerTop}）· 滚到底 头 y=${sticky.end.headerTop}（口 ${sticky.end.scrollerTop}）`)
 if (!near(sticky.mid.headerTop, sticky.mid.scrollerTop, 1.5)) fail(`分区头没有贴住滚动口上沿（差 ${sticky.mid.headerTop - sticky.mid.scrollerTop}px）`)
 if (!near(sticky.end.headerTop, sticky.end.scrollerTop, 1.5)) fail(`滚到本分区末尾时分区头掉了（差 ${sticky.end.headerTop - sticky.end.scrollerTop}px）`)
 step('长列表滚动时分区头贴顶（中途与末尾都在上沿）')
@@ -424,9 +426,17 @@ const commentCount = await page.locator('[data-pi-comment]').count()
 console.log(`· 详情 #969：正文 ${bodyLength} 字符、文件行 ${detailFiles}、时间线 ${commentCount}`)
 if (detailFiles === 0) fail('详情没有渲染出文件清单')
 if (bodyLength === 0) fail('详情没有渲染出正文')
+// 截图给 README 做预览：把详情滚回顶部（图片断言把它滚走了），不然截图只有正文中段。
+await page.evaluate(() => {
+  const body = document.querySelector('.pi-detailBody')
+  if (body !== null) body.scrollTop = 0
+})
+await page.waitForTimeout(200)
 await shoot('pr-inbox-detail')
 await page.getByRole('button', { name: /^(Back to list|返回列表)$/ }).first().click()
 await page.locator('[data-bucket="authored"]').waitFor({ timeout: 15_000 })
+// 等返回后的布局/滚动恢复落定（行不再有入场动画，但仍给一帧余量）。
+await page.waitForTimeout(250)
 // 当前项标记：官方那根 2px 内嵌强调条（伪元素，不能靠节点数证明）。
 const selected = await page.evaluate(() => {
   const row = document.querySelector('[data-pr-row][data-selected="true"]')

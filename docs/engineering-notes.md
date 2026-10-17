@@ -8,15 +8,19 @@
 ```
 src/index.ts            Node half：inject=['webServer']，注册 /plugins/dsh-pr-inbox/*
 src/host/gh.ts          gh 子进程边界（20s 超时 / 8MiB 输出上限 / 错误码分类 / 探测单飞缓存）
-src/host/repo.ts        工作区 → owner/repo（parseRemoteUrl 纯函数；requireAbsoluteCwd 入参围栏）
-src/host/prs.ts         三桶查询（author:@me / review-requested:@me / is:merged）+ 60s 有界缓存
-src/host/detail.ts      PR 详情取数（正文 64KiB / 评论 8KiB 上限 + 截断标记 + warnings）
-src/host/image.ts       图片字节代理（路径/ref 词法围栏、魔数确认、两段体积闸、nosniff）
+src/host/repo.ts        工作区 → owner/repo（upstream 优先、其次 origin；parseRemoteUrl 纯函数；requireAbsoluteCwd 入参围栏）
+src/host/prs.ts         三桶查询（author:@me / review-requested:@me / is:merged author:@me）+ 60s 有界缓存
+src/host/detail.ts      PR 详情取数（正文 64KiB / 评论 8KiB 上限 + 截断标记 + 结构化 warnings）
+src/host/image.ts       图片字节代理（路径/ref 词法围栏、魔数确认、两段体积闸、nosniff、SVG CSP、repo 缓存）
 src/host/routes.ts      HTTP 信封：POST + {op} → {ok,value} / {ok:false,error:{code,message}}
+src/host/trust.ts       跨站请求围栏（Origin 与 Host 同源；无 Origin 的本地请求放行）
 src/shared/types.ts     两端共享类型
 src/client/index.tsx    向 better-sidebar 注册 tab（TAB_ID=dsh-pr-inbox:prs）；locale 走 ctx.get 探测
-src/client/Panel.tsx    列表：三桶 + 搜索 + 简洁/详细 + 行几何
+src/client/Panel.tsx    列表：三桶 + 搜索 + 简洁/详细 + 行几何 + 刷新保留/返回恢复
 src/client/Detail.tsx   详情：正文 / 时间线 / 文件清单（插件自渲染，MarkdownText 排版）
+src/client/errors.ts    错误码 → 当前语言文案（host message 只作 title/回退）
+src/client/prefs.ts     密度偏好（localStorage，不可用则静默回退）
+src/client/tab-icon.tsx 页签图标（PR 形状，避免与内置 Git 页签分支图标撞语义）
 src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 ```
 
@@ -24,15 +28,20 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
   `GET /plugins/dsh-pr-inbox/image?cwd=&ref=&path=`。
 - 凭据：**插件不持有任何 GitHub 凭据**，一律经本机 `gh`（读到的东西不进设置文件、
   不进模型上下文）。
-- 稳定性：只在页签可见时取数、不持定时器、重新可见即补刷一次；host 侧每类结果各有
-  有界缓存（列表 60s / 详情 30s / 图片 300s）。
+- 稳定性：只在页签可见时取数、不持定时器、重新可见即补刷一次；刷新采用
+  stale-while-revalidate（保留旧内容，失败也不清空）；host 侧每类结果各有有界缓存
+  （列表 60s / 详情 30s / 图片 300s / 图片侧 cwd→repo 60s）。
 
 ## 2. 设计取舍（为什么是这样）
 
 | 决定 | 为什么 |
 |---|---|
 | **复用本机 `gh` CLI**，而不是插件内填 PAT | token 全程不进插件、不进 profile 设置、不进模型上下文；代价是目标机器要有 `gh` 且已登录——缺它时面板给的是「装 gh / `gh auth login`」这种可操作提示，而不是一个空列表 |
-| **绑定当前工作区** | `git rev-parse --show-toplevel` + `remote.origin.url` → `owner/repo`；不需要「先切仓库」 |
+| **绑定当前工作区** | `git rev-parse --show-toplevel` + remote → `owner/repo`；**`upstream` 优先、其次 `origin`**（fork 布局下 origin 是自己的 fork，绑它会让两桶看不到主仓）；不需要「先切仓库」 |
+| **「我合并的」只取 `author:@me`** | 这一桶回答「我刚做的事落地没有」，不是仓库全局合并流；取一页 20 条后按 `mergedAt` 倒序展示 |
+| **错误按 code 翻译** | host 只回 `code` + 原始 `message`；客户端按字典出人话，`message` 只进 `title`。相对时间同样只产出语义（`ageParts`） |
+| **图片代理同源围栏 + SVG sandbox** | 带 `Origin` 的请求必须与 `Host` 同源；SVG 响应加 `default-src 'none'; sandbox`，顶层打开不执行脚本 |
+| **刷新保留旧内容、返回恢复位置** | stale-while-revalidate；返回列表时恢复 `scrollTop` 与行焦点，Esc 返回 |
 | **只读 v1** | 不评论、不 approve、不合并；先证明「看」这件事做对了，写操作留到后面单独一批 |
 | **独立插件，不进 better-sidebar 核心** | 核心的 Git 面板刻意保持「纯本地 git、零网络」；本插件用 `ctx.betterSidebar` 注册 tab 即可 |
 | 颜色只消费 `--dsw-alias-*` 令牌 | 跟随深浅主题与皮肤中心，插件不持有任何颜色字面量（`scripts/gates` 无此门，但有约定 + 代码评审；`styles.ts` 实测 0 个字面色值） |
@@ -56,6 +65,9 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 | 插件在自己渲染路径里抛错会**连带打掉宿主那条 slot 的整棵渲染树** | 页签整条不出现 → console 里 `chain is not iterable at LocaleRuntime.lookup`（当时调了私有 `lookup`） | 取词/取数一律裹 `safe()`；只碰公开面（`register` + `bind`） |
 | 一个 client 行激活失败会**让整个 web boot 失败** | 负控门 C：坏 client 行 → 控制台 `web boot: 1 entry did not activate`，整页渲染不出来 | client 行的 `inject` 必须与服务名逐字一致；改服务名先跑负控 |
 | `gh` 在写缓存时若 `~/.cache` 不可写会失败 | 沙箱内实测 | 门/测试里用 `XDG_CACHE_HOME` 指到自己的 scratch |
+| **dsh 0.2.1 移除了 `webRuntime`**：better-sidebar 0.26.1 `inject` 仍要求它 → boot 日志 `pending (waiting for service: webRuntime)`，整个右栏没有入口 | 在隔离 profile 里跑 `mounted` 门 + 解包 npm 上的 0.28.0 | 0.28.0 改为 `connection`（peer `dsh-host-webserver ^0.2.1-rc.1`）；门与 README 固定 ≥0.28.0 |
+| **英文宿主下相对时间/错误曾漏中文**（截图里是 "5 小时前"/"updated 刚刚"） | 仓库自己的英文 preview 截图 + 代码审查 | `format.ts` 只产出语义、错误按 code 翻译；挂载门加英文 chrome 断言 |
+| `font-size: var(--dsw-font-xxxs-strong-11, 11px)` **不会**取到令牌 | 主题表里这个键是 `font` shorthand，不是尺寸 | 首字母头像直接写 `font-size: 11px` |
 
 ## 4. 验证证据（这些数字是"当时实测"，不是承诺）
 
@@ -77,19 +89,22 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 
 | 门 | 证明什么 | 最近一次实测 |
 |---|---|---|
-| `git-source` | **真实发布通道**（`git+file://` 等价于 README 给用户的 `github:` 源）装得上、boot 干净、路由真应答 | 全绿：无 ERESOLVE（git 依赖不装 devDependencies）、日志 0 失败行、三 op + 围栏通过 |
-| `mounted` | 隔离 profile 里真装真跑：右栏条目出现 → 面板渲染出绑定的项目 → 行几何/分层/贴顶/头像/**正文图片**都量成数字。`THEME=dark` 再跑一遍（深色截图 + 主题自证） | 全绿：行高 28/50、头带 47、行首留白 12、头像 x=717 两档一致、行线 1px/`rgba(0,0,0,0.1)`、贴顶 y=滚动口上沿、头像全解码无悬挂、**#969 正文 2 个 `<img>` 全部解码且无标签字面残留** |
-| `negative-control` | 负控：坏副本必须**响亮**报错，否则上面那条「日志干净」不算证据 | 全绿：A 基线 `entry:true`；B 坏 host → `did not activate` + `pending (waiting for service: …)` + 路由 405；C 坏 client → 条目不出现 + 控制台 `web boot: 1 entry did not activate` |
-| `standalone` | better-sidebar 缺席时：host 半照常应答、client 半安全未激活 | 全绿 |
+| `git-source` | **真实发布通道**（`git+file://` 等价于 README 给用户的 `github:` 源）装得上、boot 干净、路由真应答 | 全绿（2026-10-16，0.2.0-rc.2）：无 ERESOLVE、日志 0 失败行、三 op + 围栏通过；0.2.1 组合待重跑 |
+| `mounted` | 隔离 profile 里真装真跑：右栏条目出现 → 面板渲染出绑定的项目 → 行几何/分层/贴顶/头像/**正文图片**/英文 chrome 都量成数字。`THEME=dark` 再跑一遍（深色截图 + 主题自证） | 全绿（2026-10-17，`0.2.1-rc.1` + better-sidebar `0.28.0`）：合并桶 2 行、行高 28/50、头带 47、行首留白 12、头像 x=717 两档一致、行线 1px/`rgba(0,0,0,0.1)`、贴顶 y=滚动口上沿、头像全解码无悬挂、**#969 正文 2 个 `<img>` 全部解码且无标签字面残留**、英文 chrome 无中文时间/提示 |
+| `negative-control` | 负控：坏副本必须**响亮**报错，否则上面那条「日志干净」不算证据 | 全绿（2026-10-16，0.2.0-rc.2）：A 基线 `entry:true`；B 坏 host → `did not activate` + `pending (waiting for service: …)` + 路由 405；C 坏 client → 条目不出现 + 控制台 `web boot: 1 entry did not activate` |
+| `standalone` | better-sidebar 缺席时：host 半照常应答、client 半安全未激活 | 全绿（2026-10-16，0.2.0-rc.2） |
 
 ### 单元测试覆盖的"只有纯函数才钉得住"的东西
 
-`tests/` 121 条（2 条 live 冒烟默认跳过，`PR_INBOX_LIVE=1` 才跑）：
+`tests/` **155 条**（2 条 live 冒烟默认跳过，`PR_INBOX_LIVE=1` 才跑；2026-10-17 实测）：
 
-- `repo.spec.ts`：`https` / `scp` / `ssh` / 带凭据 / 多段 owner 五种 remote 形态；
-  且**凭据绝不进身份**。
+- `repo.spec.ts` / `repo-remote.spec.ts`：`https` / `scp` / `ssh` / 带凭据 / 多段 owner 五种
+  remote 形态；真实 `git init` 验证 upstream > origin > first 的绑定顺序与 `remoteName`。
 - `prs.spec.ts` / `detail.spec.ts` / `image.spec.ts`：三个桶的限定词、分页与每个桶的
-  独立降级；详情的有界截断；图片代理的词法围栏、扩展名与魔数、两段体积闸。
+  独立降级；详情的有界截断（含代理对边界）；图片代理的词法围栏（含编码 dot/slash）、
+  扩展名与魔数、两段体积闸、SVG CSP、repo 缓存。
+- `format.spec.ts` / `errors.spec.ts` / `prefs.spec.ts` / `trust.spec.ts` / `routes.spec.ts`：
+  相对时间只产出语义、错误码翻译、密度偏好回退、Origin 围栏、`OPS` 原型键围栏。
 - `pr-image.spec.ts`：`refs/pull/<n>/head` 取图（fork PR 上 `headRefName` 必 404）+
   路径逃逸/绝对 URL/非 github host 一律拒。
 - `gates.spec.mjs`：每个门禁的非法样例。
@@ -113,8 +128,12 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
   行几何与浅色逐项相同。
 - 浅色：行几何坐标、发丝线 `rgba(0,0,0,0.1)`、圆角、卡片数、选中强调条（伪元素）、
   贴顶位置、头像槽全部 settle。
-- 状态覆盖：静止 / hover（外链现形）/ 选中 / `:focus-visible`（官方 outline）/ 折叠分区；
-  `prefers-reduced-motion` 有分支。
+- 状态覆盖：静止 / hover（外链现形）/ 选中（含 `aria-current`）/ `:focus-visible`（官方 outline）/
+  折叠分区；行不再有入场动画（返回列表时不会整屏闪一下）。
+- **英文 chrome 断言**：挂载门在英文宿主下检查顶栏 / 分区头 / 状态行不含中文时间或中文
+  提示（PR 标题可以是中文，所以不扫整块面板）——这是「英文界面漏中文」的回归门。
+- 返回列表：挂载门验证当前项强调条与 `data-selected`；滚动/焦点恢复是同一段
+  `useLayoutEffect` 的行为（几何门不直接量，但代码路径唯一）。
 - 样式没被宿主吃掉：**在真实 GUI 里**取的计算样式（不是看源码），且 `theme-tokens` 门
   机械地挡住"写死颜色 / 自带主题分支"这个根因。
 
@@ -136,6 +155,12 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 - `bug-fix-body-images-via-pull-ref` — fork PR 取图 404 的修法
 - `bug-fix-hairlines-instead-of-fill-layers` — 分块/行边界（含 §3 的浅色主题事实）
 - `bug-fix-locale-lookup-crashed-sidebar` — 取词崩溃连带打掉右栏
+- `feature-merged-bucket-authored-only` — 「最近合并」改成「我合并的」
+- `bug-fix-i18n-leaks` — 相对时间/错误提示的本地化收口
+- `bug-fix-upstream-remote-binding` — fork checkout 的 upstream 优先绑定
+- `bug-fix-image-proxy-hardening` — SVG CSP / Origin 围栏 / 路径词法
+- `bug-fix-panel-state-and-a11y` — 刷新保留、返回恢复、键盘外链、aria
+- `process-better-sidebar-028-compat` — 0.2.1 线需要 better-sidebar ≥0.28.0
 - `feature-readonly-three-buckets-v1` — v1 的边界
 - `process-generated-lib-and-gate-shape` — 产物入库 + 门禁形态
 - `testing-real-mount-gate-with-coordinates` — 为什么用坐标断言验收
@@ -147,4 +172,6 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 - 阶段三：点开一行 → 插件自渲染详情（正文、评论与评审时间线、改动文件清单；
   正文与时间线有界并如实标注截断，支线失败进 `warnings` 而不是空白）。
 - 阶段四：发布前收敛（包契约、门禁、决策记录、locale 显示元数据、真实通道与负控）。
+- 阶段五（2026-10-17 审查修复）：i18n 收口、merged 桶语义、upstream 绑定、刷新/返回/
+  键盘/a11y、图片代理加固、better-sidebar 0.28.0 兼容门。
 - 写操作（评论 / approve / merge）不在只读 v1 范围内。

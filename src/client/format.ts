@@ -1,8 +1,13 @@
 /**
- * 展示层的纯函数：相对时间、日期、搜索匹配。抽出来是为了单测能钉住口径
- * （列表里那个「3 天前」不该随 locale 飘）。
+ * 展示层的纯函数：相对时间、日期、搜索匹配、合并桶排序。
+ *
+ * 这里**不写任何用户可见文案**：相对时间产出「单位 + 数字」，文案由 i18n 字典给
+ * （`ageText(tf, …)`）。这样同一个函数在中文/英文宿主下都不会漏出对方语言。
  */
+import type { BucketKey, PrRow } from '../shared/types'
 
+/** 与 `I18n.tf` 同形；format 层只依赖这个最小面，不依赖整个 i18n 对象。 */
+export type Translate = (key: string, params?: Record<string, string | number>) => string
 /** GitHub 给的是 ISO 8601 UTC；解析失败返回 undefined 而不是 NaN 时间。 */
 function timeOf(iso: string): number | undefined {
   const parsed = Date.parse(iso)
@@ -13,20 +18,34 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
-/** 相对时间：刚刚 / n 分钟前 / n 小时前 / n 天前 / n 个月前 / n 年前。 */
-export function formatAge(iso: string, now = Date.now()): string {
+export type AgeUnit = 'justNow' | 'minutesAgo' | 'hoursAgo' | 'daysAgo' | 'monthsAgo' | 'yearsAgo'
+
+/** 相对时间的**语义**部分：字典键 + 数字（`justNow` 没有数字）。 */
+export interface AgeParts {
+  key: AgeUnit
+  value?: number
+}
+
+/** 把 ISO 时间归到字典键；解析失败返回 undefined（调用方回空串，不显示 NaN）。 */
+export function ageParts(iso: string, now = Date.now()): AgeParts | undefined {
   const time = timeOf(iso)
-  if (time === undefined) return ''
+  if (time === undefined) return undefined
   const delta = now - time
-  if (delta < 0) return '刚刚'
-  if (delta < MINUTE) return '刚刚'
-  if (delta < HOUR) return `${Math.floor(delta / MINUTE)} 分钟前`
-  if (delta < DAY) return `${Math.floor(delta / HOUR)} 小时前`
+  if (delta < MINUTE) return { key: 'justNow' }
+  if (delta < HOUR) return { key: 'minutesAgo', value: Math.floor(delta / MINUTE) }
+  if (delta < DAY) return { key: 'hoursAgo', value: Math.floor(delta / HOUR) }
   const days = Math.floor(delta / DAY)
-  if (days < 30) return `${days} 天前`
+  if (days < 30) return { key: 'daysAgo', value: days }
   const months = Math.floor(days / 30)
-  if (months < 12) return `${months} 个月前`
-  return `${Math.floor(days / 365)} 年前`
+  if (months < 12) return { key: 'monthsAgo', value: months }
+  return { key: 'yearsAgo', value: Math.floor(days / 365) }
+}
+
+/** 相对时间 → 当前语言的文案（中文「3 天前」/ 英文「3 days ago」）。 */
+export function ageText(tf: Translate, iso: string, now = Date.now()): string {
+  const parts = ageParts(iso, now)
+  if (parts === undefined) return ''
+  return parts.value === undefined ? tf(parts.key) : tf(parts.key, { n: parts.value })
 }
 
 /**
@@ -55,6 +74,20 @@ export function formatDate(iso: string): string {
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
   const day = `${date.getDate()}`.padStart(2, '0')
   return `${date.getFullYear()}-${month}-${day}`
+}
+
+/**
+ * 合并桶按**合并时间**倒序展示（搜索接口只能按 updated 取一页；取回之后
+ * 在本地按 mergedAt 排一次，避免「刚合并但没再更新」的 PR 被压到下面）。
+ * 其它桶保持上游 updated 顺序；返回新数组，不改调用方的数据。
+ */
+export function sortRowsForBucket(bucket: BucketKey, rows: readonly PrRow[]): PrRow[] {
+  if (bucket !== 'merged') return [...rows]
+  const at = (row: PrRow): number => {
+    const parsed = Date.parse(row.mergedAt ?? row.updatedAt)
+    return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
+  }
+  return [...rows].sort((left, right) => at(right) - at(left))
 }
 
 /** 搜索框匹配：编号（可带 #）、标题、作者、标签，大小写不敏感。 */

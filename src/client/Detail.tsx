@@ -30,10 +30,11 @@ import {
   Tag,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MarkdownLabels, MarkdownPathImages } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { PrDetailComment, PrDetailFile, PrDetailValue } from '../shared/types'
+import type { PrDetailComment, PrDetailFile, PrDetailValue, PrDetailWarning } from '../shared/types'
 import { absoluteHostUrl } from './api'
 import { Author } from './bits'
-import { avatarUrlOf, formatAge, formatDate } from './format'
+import { errorText } from './errors'
+import { ageText, avatarUrlOf, formatDate } from './format'
 import { expandHtmlImages } from './markdown-images'
 import { resolvePrImagePath } from './pr-image'
 import type { I18n } from './i18n'
@@ -69,26 +70,41 @@ const REVIEW_KEY: Record<string, string> = {
   DISMISSED: 'reviewDismissed',
   PENDING: 'reviewPending',
 }
+const WARNING_KEY: Record<PrDetailWarning['part'], string> = {
+  files: 'warningFiles',
+  comments: 'warningComments',
+  reviews: 'warningReviews',
+}
+
+/** GitHub 用户主页；空 login 不产出链接。 */
+function profileUrl(login: string): string | undefined {
+  return login === '' ? undefined : `https://github.com/${encodeURIComponent(login)}`
+}
 
 function Comment({ entry, labels, pathImages, i18n }: { entry: PrDetailComment, labels: MarkdownLabels, pathImages: MarkdownPathImages, i18n: I18n }) {
-  const { t } = i18n
+  const { t, tf } = i18n
   const avatar = avatarUrlOf(entry)
-  const head: ReactNode[] = [createElement(Author, { key: 'a', login: entry.author, ...(avatar === undefined ? {} : { avatar }) })]
+  const href = profileUrl(entry.author)
+  const head: ReactNode[] = [createElement(Author, {
+    key: 'a', login: entry.author, ...(avatar === undefined ? {} : { avatar }), ...(href === undefined ? {} : { href }),
+  })]
   if (entry.kind === 'review') {
     const state = entry.reviewState ?? 'COMMENTED'
     head.push(createElement(Tag, { key: 's', tone: REVIEW_TONE[state] ?? 'neutral' }, t(REVIEW_KEY[state] ?? 'reviewCommented')))
   }
-  head.push(createElement(Tag, { key: 't', tone: 'quiet' }, formatAge(entry.createdAt)))
-  return createElement('div', { className: 'pi-card pi-comment', 'data-pi-comment': entry.kind }, [
-    createElement('div', { key: 'h', className: 'pi-commentHead' }, head),
-    createElement(MarkdownText, {
+  head.push(createElement(Tag, { key: 't', tone: 'quiet' }, ageText(tf, entry.createdAt)))
+  const children: ReactNode[] = [createElement('div', { key: 'h', className: 'pi-commentHead' }, head)]
+  // 没有正文的 review（直接 APPROVE / REQUEST_CHANGES）只留 head，不显示「（没有正文）」。
+  if (entry.kind === 'comment' || entry.body !== '') {
+    children.push(createElement(MarkdownText, {
       key: 'b',
       text: entry.body === '' ? t('emptyBody') : expandHtmlImages(entry.body),
       labels,
       pathImages,
       variant: 'compact',
-    }),
-  ])
+    }))
+  }
+  return createElement('div', { className: 'pi-card pi-comment', 'data-pi-comment': entry.kind }, children)
 }
 
 function FileRow({ file, i18n }: { file: PrDetailFile, i18n: I18n }) {
@@ -105,10 +121,12 @@ function FileRow({ file, i18n }: { file: PrDetailFile, i18n: I18n }) {
   ])
 }
 
+interface DetailFailure { message: string, code?: string }
+
 export interface DetailProps {
   detail: PrDetailValue | undefined
   loading: boolean
-  error: string | undefined
+  error: DetailFailure | undefined
   i18n: I18n
   /** host 路由解析与图片代理都需要它们。 */
   ctx: Context
@@ -120,6 +138,7 @@ export interface DetailProps {
 export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefresh }: DetailProps) {
   const { t, tf } = i18n
   const detailAvatar = detail === undefined ? undefined : avatarUrlOf(detail)
+  const detailAuthorHref = detail === undefined ? undefined : profileUrl(detail.author)
   // labels 必须引用稳定（新 identity 会丢掉 MarkdownText 的流式渲染缓存）。
   const labels = useMemo<MarkdownLabels>(() => ({
     code: {
@@ -155,6 +174,7 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
       key: 'r', variant: 'toolbar', size: 'sm',
       icon: createElement(IconRefreshOutlineRegular, {}),
       'aria-label': t('refresh'), title: t('refresh'), onClick: onRefresh,
+      disabled: loading,
     }),
     detail === undefined ? null : createElement(Button, {
       key: 'x', variant: 'ghost', size: 'sm',
@@ -166,13 +186,18 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
 
   const body: ReactNode[] = []
   if (error !== undefined) {
-    body.push(createElement('div', { key: 'e', className: 'pi-notice', 'data-tone': 'error' }, error))
+    body.push(createElement('div', {
+      key: 'e', className: 'pi-notice', 'data-tone': 'error', 'aria-live': 'polite', title: error.message,
+    }, errorText(i18n, error)))
   }
   if (detail === undefined) {
-    body.push(createElement('div', { key: 'l', className: 'pi-empty' }, t('reading')))
+    if (error === undefined) body.push(createElement('div', { key: 'l', className: 'pi-empty', role: 'status' }, t('reading')))
   } else {
     const meta: ReactNode[] = [
-      createElement(Author, { key: 'a', login: detail.author, ...(detailAvatar === undefined ? {} : { avatar: detailAvatar }) }),
+      createElement(Author, {
+        key: 'a', login: detail.author, ...(detailAvatar === undefined ? {} : { avatar: detailAvatar }),
+        ...(detailAuthorHref === undefined ? {} : { href: detailAuthorHref }),
+      }),
       createElement(Tag, {
         key: 's',
         tone: detail.mergedAt !== undefined ? 'info' : detail.state === 'open' ? 'success' : 'neutral',
@@ -188,13 +213,19 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
       ]),
       createElement('span', { key: 'a', className: 'pi-add' }, `+${detail.additions}`),
       createElement('span', { key: 'd', className: 'pi-del' }, `−${detail.deletions}`),
-      createElement('span', { key: 'f' }, tf('files', { count: detail.changedFiles })),
-      createElement('span', { key: 'c' }, tf('commits', { count: detail.commits })),
-      createElement('span', { key: 'u' }, `${t('updated')} ${formatAge(detail.updatedAt)}`),
+      createElement('span', { key: 'f' }, tf(detail.changedFiles === 1 ? 'filesOne' : 'files', { count: detail.changedFiles })),
+      createElement('span', { key: 'c' }, tf(detail.commits === 1 ? 'commitsOne' : 'commits', { count: detail.commits })),
+      createElement('span', { key: 'u' }, `${t('updated')} ${ageText(tf, detail.updatedAt)}`),
       detail.mergedAt === undefined ? null : createElement('span', { key: 'm' }, `${t('mergedAt')} ${formatDate(detail.mergedAt)}`),
     ]))
     for (const warning of detail.warnings) {
-      body.push(createElement('div', { key: `w:${warning}`, className: 'pi-notice', 'data-tone': 'warn' }, warning))
+      body.push(createElement('div', {
+        key: `w:${warning.part}:${warning.message}`,
+        className: 'pi-notice',
+        'data-tone': 'warn',
+        'aria-live': 'polite',
+        title: warning.message,
+      }, `${t(WARNING_KEY[warning.part])}: ${errorText(i18n, warning)}`))
     }
     body.push(createElement('div', { key: 'prose', className: 'pi-card', 'data-pi-body': '' },
       createElement(MarkdownText, {
@@ -222,14 +253,24 @@ export function Detail({ detail, loading, error, i18n, ctx, cwd, onBack, onRefre
       t('filesTitle'),
       createElement('span', { key: 'n', className: 'pi-sectionCount' }, String(detail.changedFiles)),
     ]))
-    body.push(createElement('div', { key: 'fl', className: 'pi-card', 'data-flush': 'true' },
-      detail.files.map(file => createElement(FileRow, { key: file.path, file, i18n }))))
+    if (detail.files.length === 0) {
+      body.push(createElement('div', { key: 'fe', className: 'pi-empty' }, t('noFiles')))
+    } else {
+      body.push(createElement('div', { key: 'fl', className: 'pi-card', 'data-flush': 'true' },
+        detail.files.map(file => createElement(FileRow, { key: file.path, file, i18n }))))
+    }
     if (detail.filesTruncated) {
       body.push(createElement('div', { key: 'ft', className: 'pi-notice', 'data-tone': 'warn' }, t('filesTruncated')))
     }
   }
 
-  return createElement('div', { className: 'pi-detail', 'data-dsh-pr-inbox-detail': String(detail?.number ?? '') },
-    head,
-    createElement('div', { className: 'pi-detailBody' }, body))
+  return createElement('div', {
+    className: 'pi-detail',
+    'data-dsh-pr-inbox-detail': String(detail?.number ?? ''),
+    tabIndex: -1,
+    role: 'region',
+    'aria-label': detail === undefined ? t('tabTitle') : `#${detail.number} ${detail.title}`,
+  },
+  head,
+  createElement('div', { className: 'pi-detailBody' }, body))
 }

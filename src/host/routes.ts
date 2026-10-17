@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { PrInboxError } from './gh'
 import { IMAGE_PATH, imageHandler } from './image'
 import { detailOp, listOp, statusOp } from './ops'
+import { isSameOrigin } from './trust'
 
 export const ROUTE_PATH = '/plugins/dsh-pr-inbox/api'
 
@@ -84,13 +85,18 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       send(res, 405, { ok: false, error: { code: 'method-not-allowed', message: '只用 POST' } })
       return
     }
+    if (!isSameOrigin(req)) {
+      send(res, 403, { ok: false, error: { code: 'forbidden', message: '跨站请求被拒绝' } })
+      return
+    }
     const payload = await readBody(req) as Record<string, unknown>
     const op = payload.op
     if (typeof op !== 'string' || op === '') {
       send(res, 400, { ok: false, error: { code: 'bad-request', message: '缺少 op' } })
       return
     }
-    const handler = OPS[op]
+    // `OPS` 是普通对象：`op='constructor'` 会命中原型链上的函数，必须用自有键判定。
+    const handler = Object.hasOwn(OPS, op) ? OPS[op] : undefined
     if (handler === undefined) {
       send(res, 400, { ok: false, error: { code: 'unknown-op', message: `未知 op：${op}` } })
       return

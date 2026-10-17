@@ -8,7 +8,7 @@
 侧边栏的 **PR 面板**：自动绑定当前会话工作区的项目，按「与我相关」分桶原生渲染 Pull Request。
 
 - **v1 只读**：不评论、不 approve、不合并、不改标签。先证明「看」这件事做对了。
-- 三桶：`Authored by me`（`author:@me`）· `Needs my review`（`review-requested:@me`）· `Recently merged`（`is:merged`，取最近 **20** 条）。
+- 三桶：`Authored by me`（`author:@me`）· `Needs my review`（`review-requested:@me`）· `Merged by me`（`is:merged author:@me`，取最近 **20** 条，展示按合并时间倒序）。
 - 顶部搜索框（客户端过滤已加载页）+ 简洁/详细两档密度（选择持久化在 `localStorage`）。
 - 点开一行 → **插件自己渲染**详情（正文 / 时间线 / 文件清单），不嵌网页。
 
@@ -23,9 +23,13 @@
 |---|---|
 | **复用本机 `gh` CLI**，而不是插件内填 PAT | token 全程不进插件、不进 profile 设置、不进模型上下文（`gh` 自己管凭据）；代价是目标机器要有 `gh` 且已登录——缺它时给的是「装 gh / `gh auth login`」这种可操作提示，而不是空列表 |
 | **独立插件，不进 better-sidebar 核心** | 核心的 Git 面板刻意保持「纯本地 git、零网络」。GitHub 那半边生态一直在做（`dsh-github-workbench` / `dsh-ide-git` / `dsh-dev-git-graph`），本插件用 `ctx.betterSidebar` 注册 tab 即可，不占核心的审阅带宽 |
-| **绑定工作区而不是「先切仓库」** | 原料只有 git 自己：`rev-parse --show-toplevel` + `remote.origin.url` → `owner/repo`；切会话即换项目 |
+| **绑定工作区而不是「先切仓库」** | 原料只有 git 自己：`rev-parse --show-toplevel` + remote → `owner/repo`（**upstream 优先**、其次 origin，fork 布局才绑得到主仓）；切会话即换项目 |
 | **三桶走 `search/issues` 而不是 `gh search prs`** | ① 搜索接口回 `total_count`（桶头计数角标要它，`gh search prs` 不给）；② `is:merged` 能写进 q，而 `gh search prs --state` 不认 `merged`（只认 open/closed） |
 | **颜色只消费 `--dsw-alias-*` 令牌** | 跟随深浅主题与皮肤中心；插件不持有任何颜色字面量 |
+
+> 2026-10-17 修订：合并桶改为 `author:@me`（回答「我合并的工作有没有落地」，而不是仓库
+> 全局合并流）；搜索仍按 updated 取一页，展示时按 `mergedAt` 倒序。密度持久化已按本文
+> 实现。其余取舍见 `decisions/implemented/` 下的新记录。
 
 ## 3. 数据来源与端点
 

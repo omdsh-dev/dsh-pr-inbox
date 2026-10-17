@@ -29,12 +29,16 @@ export interface BucketQuery {
   limit: number
 }
 
-/** 三个桶的查询（纯函数：给定 owner/repo 产出限定词，便于单测锁定语义）。 */
+/** 三个桶的查询（纯函数：给定 owner/repo 产出限定词，便于单测锁定语义）。
+ *
+ * 「最近合并」限定 `author:@me`：这一桶回答的是「我刚做的事落地没有」，
+ * 不是「仓库最近合并了什么」。仓库全局的合并流会把这一桶变成别人的时间线。
+ */
 export function bucketQueries(repo: string): BucketQuery[] {
   return [
     { key: 'authored', q: `repo:${repo} is:pr is:open author:@me`, limit: PAGE_SIZE },
     { key: 'review', q: `repo:${repo} is:pr is:open review-requested:@me`, limit: PAGE_SIZE },
-    { key: 'merged', q: `repo:${repo} is:pr is:merged`, limit: MERGED_LIMIT },
+    { key: 'merged', q: `repo:${repo} is:pr is:merged author:@me`, limit: MERGED_LIMIT },
   ]
 }
 
