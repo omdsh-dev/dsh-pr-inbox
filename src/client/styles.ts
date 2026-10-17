@@ -27,7 +27,7 @@ const CSS = `
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px 6px 12px;
+  padding: 8px 8px 8px 12px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l1);
 }
 .pi-search { flex: 1; min-width: 0; display: flex; }
@@ -61,6 +61,8 @@ const CSS = `
   z-index: 2;
   background: var(--dsw-alias-bg-base);
 }
+/* 空桶只留一行头：没有可折叠的内容，不画 chevron、也不再显示「Nothing…」。 */
+.pi-sectionHeaderEmpty { cursor: default; }
 .pi-sectionLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pi-sectionCount {
   flex: none;
@@ -70,7 +72,7 @@ const CSS = `
 }
 /* 「待我审」有货时计数取警告色：这是面板里唯一「需要你动作」的信号。 */
 .pi-sectionCount[data-attention='true'] { color: var(--dsw-alias-state-warn-primary); }
-.pi-chevron { flex: none; display: inline-flex; color: var(--dsw-alias-label-tertiary); transition: transform 120ms var(--ds-ease-in-out); }
+.pi-chevron { flex: none; display: inline-flex; justify-content: center; min-width: 14px; color: var(--dsw-alias-label-tertiary); transition: transform 120ms var(--ds-ease-in-out); }
 .pi-section[data-open='false'] .pi-chevron { transform: rotate(-90deg); }
 .pi-section[data-open='false'] .pi-rows { display: none; }
 
@@ -83,7 +85,7 @@ const CSS = `
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 4px 10px 4px 12px;
+  padding: 4px 12px;
   cursor: pointer;
 }
 .pi-row + .pi-row { border-top: 0.5px solid var(--dsw-alias-border-l2); }
@@ -115,6 +117,8 @@ const CSS = `
 .pi-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 /* 简洁档 = 只有首行（28px 通栏，官方控件高度）；详细档 = 首行 + 事实行。 */
 .pi-row[data-density='compact'] { align-items: center; height: 28px; padding-top: 0; padding-bottom: 0; }
+/* 详细档固定 50：没有标签/合并时间时第二行更矮，行高不能因此抖。 */
+.pi-row[data-density='detailed'] { min-height: 50px; }
 .pi-line1 { display: flex; align-items: center; gap: 8px; min-width: 0; height: 20px; }
 .pi-line2 { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
 .pi-age { flex: none; display: inline-flex; align-items: center; }
@@ -165,7 +169,7 @@ const CSS = `
 .pi-meta[data-fresh='true'] { color: var(--dsw-alias-label-secondary); }
 .pi-grow { flex: 1; min-width: 0; }
 
-.pi-empty { padding: 10px 12px; color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary); line-height: 1.4; }
+.pi-empty { padding: 6px 12px; color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary); line-height: 1.4; }
 .pi-notice { padding: 8px 12px; color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary); line-height: 1.45; white-space: pre-wrap; }
 .pi-notice[data-tone='error'] { color: var(--dsw-alias-state-error-primary); }
 .pi-notice[data-tone='warn'] { color: var(--dsw-alias-state-warn-primary); }
@@ -176,7 +180,7 @@ const CSS = `
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
+  height: 28px;
   padding: 0 12px;
   border-top: 0.5px solid var(--dsw-alias-border-l1);
   color: var(--dsw-alias-label-tertiary);
@@ -232,10 +236,10 @@ const CSS = `
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 10px 10px 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 /* 区分「正文 / 评论 / 文件清单」三块：**0.5px 发丝边界 + 圆角**。
    为什么不靠填充差：实测 DSH 浅色主题下 bg-base / layer-1 / layer-2 / layer-3
@@ -245,19 +249,19 @@ const CSS = `
 .pi-card {
   background: var(--dsw-alias-bg-layer-2);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-lg);
-  padding: 10px 12px;
+  border-radius: var(--dsw-radius-md);
+  padding: 12px;
 }
 .pi-card[data-flush='true'] { padding: 4px; }
-.pi-stack { display: flex; flex-direction: column; gap: 8px; }
-.pi-detailMeta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pi-stack { display: flex; flex-direction: column; gap: 10px; }
+.pi-detailMeta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pi-detailStats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px 12px;
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--dsh-content-font-size-secondary);
-  line-height: 1.3;
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
   flex-wrap: wrap;
 }
@@ -268,21 +272,21 @@ const CSS = `
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: 28px;
   margin-top: 2px;
-  padding: 0 2px;
+  padding: 0 4px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-secondary);
-  font: var(--dsw-font-xs-strong-13);
+  font: var(--dsw-font-xxs-strong-12);
 }
-.pi-comment { display: flex; flex-direction: column; gap: 6px; }
+.pi-comment { display: flex; flex-direction: column; gap: 8px; }
 .pi-commentHead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .pi-file {
   box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  height: 28px;
   padding: 0 8px;
   border-radius: var(--dsw-radius-sm);
 }

@@ -8,10 +8,12 @@
 
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue">
-  <img alt="dsh" src="https://img.shields.io/badge/dsh-0.2.0--rc.2-brightgreen">
+  <img alt="dsh" src="https://img.shields.io/badge/dsh-0.2.1--rc.1-brightgreen">
 </p>
 
-![三桶列表（简洁档）](docs/preview/compact.png)
+<p align="center">
+  <img alt="三桶列表（简洁档）" src="docs/preview/compact.png" width="520">
+</p>
 
 ## 为什么需要它
 
@@ -54,14 +56,14 @@ dsh plugin --profile web add dsh-better-sidebar
 
 ```bash
 dsh plugin --profile web add "github:omdsh-dev/dsh-pr-inbox"
-# 钉版本：用 ...#v0.1.0
+# 钉版本：用 ...#v0.1.1
 ```
 
 本地开发/自测也可以走 tarball（需要 clone 仓库）：
 
 ```bash
-pnpm install && pnpm pack                       # 产出 dsh-pr-inbox-0.1.0.tgz
-dsh plugin --profile web add ./dsh-pr-inbox-0.1.0.tgz
+pnpm install && pnpm pack                       # 产出 dsh-pr-inbox-0.1.1.tgz
+dsh plugin --profile web add ./dsh-pr-inbox-0.1.1.tgz
 ```
 
 装完刷新页面（或按 DSH 提示重启 web）即可在**右侧栏**看到 `PR` 页签：
@@ -77,16 +79,20 @@ dsh plugin --profile web add ./dsh-pr-inbox-0.1.0.tgz
 | **顶部** | 搜索框（标题 / 编号 / 作者 / 标签，只在已加载的行里过滤）+ `简洁/详细` 切换（选择会记住）+ 刷新 |
 | **简洁档** | 单行 28px：行首头像 · `#编号` · 标题 · 时间；适合快速扫 |
 | **详细档** | 两行 50px：第一行与简洁档**同一个位置**，第二行补作者、合并时间、标签、评论数 |
-| **分区块** | 三个桶各自成区，滚动时当前区的名字与计数贴在上沿；点击区头折叠。只加载了一页时计数显示 `已加载 / 总数` |
+| **分区块** | 三个桶各自成区，滚动时当前区的名字与计数贴在上沿；点击区头折叠。空桶只留一行计数（不显示占位文案）；只加载了一页时计数显示 `已加载 / 总数` |
 | **点开一行** | 面板内打开完整 PR：正文（markdown 渲染，图片走宿主代理）、评论与评审摘要、改动文件清单（状态色标 + 增删行数）；`返回列表` 会回到原来的滚动位置与行焦点，当前项有强调条；详情里按 Esc 也能返回 |
 | **状态行** | 底部常显绑定的仓库、当前 gh 账号与数据的读取时间（详情页也在） |
 
 <p align="center">
-  <img alt="浅色" src="docs/preview/detailed.png" width="46%">
-  <img alt="深色" src="docs/preview/compact-dark.png" width="46%">
+  <img alt="详细档" src="docs/preview/detailed.png" width="46%">
+  <img alt="深色主题" src="docs/preview/compact-dark.png" width="46%">
 </p>
 
-![PR 详情（正文 / 时间线 / 文件清单）](docs/preview/detail.png)
+<p align="center">
+  <img alt="PR 详情（正文 / 时间线 / 文件清单）" src="docs/preview/detail.png" width="520">
+</p>
+
+> 截图只截插件面板本身（不含宿主聊天区）；详情预览用一篇纯文字正文的 PR，避免把正文里的大图当成插件界面。
 
 ## 能力面
 

@@ -173,12 +173,22 @@ const shoot = async (name) => {
   await page.screenshot({ path: `${shotDir}/${file}.png` })
   console.log(`· 截图：${shotDir}/${file}.png`)
 }
+/** 只截插件面板本身（README 预览用）：不带左侧聊天、失败消息或宿主外壳。 */
+const shootPanel = async (name) => {
+  if (shotDir === undefined) return
+  const { mkdirSync } = await import('node:fs')
+  mkdirSync(shotDir, { recursive: true })
+  const file = `${name}-panel${THEME === 'dark' ? '-dark' : ''}`
+  await page.locator('[data-dsh-pr-inbox-panel]').first().screenshot({ path: `${shotDir}/${file}.png` })
+  console.log(`· 面板截图：${shotDir}/${file}.png`)
+}
 console.log(`· 头像位：${avatarState.slots} 个（网络图 ${avatarState.loaded} / 首字母 ${avatarState.initials} / 破图 ${avatarState.broken} / 悬挂 ${avatarState.pending}）`)
 if (avatarState.slots === 0) fail('列表里没有任何头像位（host 的 authorAvatar 没传到 UI？）')
 if (avatarState.broken > 0) fail(`仍有 ${avatarState.broken} 个加载失败的破图（回退没生效）`)
 if (avatarState.pending > 0) fail(`仍有 ${avatarState.pending} 个头像位停在未加载状态（要么加载要么回退，不许悬挂）`)
 
 await shoot('pr-inbox-compact')
+await shootPanel('pr-inbox-compact')
 
 // ── 行几何（不靠肉眼）───────────────────────────────────────────────────────
 // 「头像固定在行首」+「切密度不跳位」是这一轮的验收点，所以量的是元素坐标：
@@ -258,6 +268,7 @@ await page.getByRole('button', { name: /^(Detailed|详细)$/ }).first().click()
 await page.locator('[data-pr-row][data-density="detailed"]').first().waitFor({ timeout: 10_000 })
 step('密度切换生效（详细）')
 await shoot('pr-inbox-detailed')
+await shootPanel('pr-inbox-detailed')
 const detailedRow = await measureRow()
 if (detailedRow === null || detailedRow.number !== compactRow.number) fail('两档量到的不是同一行，无法比较几何')
 console.log(`· 行几何（详细 #${detailedRow.number}）：行高 ${detailedRow.rowHeight}px · 头像 x=${detailedRow.avatar?.x}/y=${detailedRow.avatar?.y} · 编号 x=${detailedRow.num?.x} · 标题 x=${detailedRow.subject?.x} · 行数 ${detailedRow.lines}`)
@@ -450,6 +461,24 @@ if (Number.parseFloat(selected.width) < 2) fail(`当前项的强调条没画出�
 if (selected.fill.startsWith('rgba(0, 0, 0, 0)')) fail('当前项的强调条是透明的')
 await shoot('pr-inbox-selected')
 step('详情打开 + 返回列表生效（当前项带强调条）')
+
+// README 预览：用 #968（正文是文字）而不是 #969（正文里有 Git Graph 大图）。
+// 只截面板本身，避免把左侧聊天的失败消息带进 README。
+const textDetailRow = page.locator('[data-pr-row="968"]').first()
+if (await textDetailRow.count() === 0) {
+  console.log('· 列表里没有 #968，跳过 README 详情预览')
+} else {
+  await textDetailRow.click()
+  await page.locator('[data-dsh-pr-inbox-detail="968"]').waitFor({ timeout: 60_000 })
+  await page.evaluate(() => {
+    const body = document.querySelector('.pi-detailBody')
+    if (body !== null) body.scrollTop = 0
+  })
+  await page.waitForTimeout(250)
+  await shootPanel('pr-inbox-detail')
+  await page.getByRole('button', { name: /^(Back to list|返回列表)$/ }).first().click()
+  await page.locator('[data-bucket="authored"]').waitFor({ timeout: 15_000 })
+}
 
 if (pageErrors.length > 0) fail(`页面报错：${pageErrors.join(' | ')}`)
 console.log(`✅ PR 面板已在真实实例里渲染并绑定项目：${expectRepo ?? text.slice(0, 80)}`)

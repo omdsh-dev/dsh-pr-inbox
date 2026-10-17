@@ -44,8 +44,8 @@ gh repo create omdsh-dev/dsh-pr-inbox --public --source . --remote origin --push
 ## 3. 打 tag（README 的"钉版本"命令引用的就是它）
 
 ```bash
-git tag -a v0.1.0 -m "dsh-pr-inbox v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "dsh-pr-inbox v0.1.1"
+git push origin v0.1.1
 ```
 
 ## 4. 仓库描述与 topics（搜索里能被一眼看懂 + 能被搜到）

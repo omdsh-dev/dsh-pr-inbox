@@ -181,39 +181,57 @@ function Section(props: {
   )
   const total = value?.total ?? 0
   const filtered = query.trim() !== ''
+  const empty = rows.length === 0 && value?.error === undefined && !filtered
   const count = filtered
     ? tf('hits', { hit: rows.length, total })
     : rows.length < total ? tf('shownOfTotal', { shown: rows.length, total }) : String(total)
+  const countNode = createElement('span', {
+    key: 'n',
+    className: 'pi-sectionCount',
+    'data-attention': bucket === 'review' && total > 0 ? 'true' : undefined,
+    ...(rows.length < total ? { title: tf('shownOfTotalTitle', { shown: rows.length, total }) } : {}),
+  }, count)
   const body: ReactNode[] = []
   if (value?.error !== undefined) {
     body.push(notice('e', errorText(i18n, value.error), 'error', value.error.message))
     const hint = hintFor(i18n, value.error.code)
     if (hint !== undefined) body.push(notice('h', hint))
-  } else if (rows.length === 0) {
-    body.push(createElement('div', { key: 'z', className: 'pi-empty' }, filtered ? t('noMatch') : t('bucketEmpty')))
+  } else if (filtered && rows.length === 0) {
+    body.push(createElement('div', { key: 'z', className: 'pi-empty' }, t('noMatch')))
   }
   for (const row of rows) {
     body.push(createElement(Row, {
       key: row.number, row, density: props.density, selected: props.selected === row.number, onSelect: props.onSelect, i18n,
     }))
   }
-  return createElement('section', { className: 'pi-section', 'data-bucket': bucket, 'data-open': props.open ? 'true' : 'false' }, [
-    createElement('button', {
-      key: 'h', type: 'button', className: 'pi-sectionHeader', onClick: props.onToggle,
-      'aria-expanded': props.open, 'aria-controls': `pi-rows-${bucket}`,
-      // 查询限定词不再常显（窄侧栏里它最先挤掉标题），留给原生 tooltip。
-      title: t(BUCKET_HINT[bucket]),
-    }, [
-      createElement('span', { key: 'c', className: 'pi-chevron' }, createElement(IconChevronDownOutlineRegular, { size: 14 })),
-      createElement('span', { key: 'l', className: 'pi-sectionLabel' }, t(BUCKET_LABEL[bucket])),
-      createElement('span', {
-        key: 'n',
-        className: 'pi-sectionCount',
-        'data-attention': bucket === 'review' && total > 0 ? 'true' : undefined,
-        ...(rows.length < total ? { title: tf('shownOfTotalTitle', { shown: rows.length, total }) } : {}),
-      }, count),
-    ]),
-    createElement('div', { key: 'b', className: 'pi-rows', id: `pi-rows-${bucket}` }, body),
+  // 空桶只留一行头：没有可折叠的内容，chevron 与「Nothing…」都是噪音。
+  const header = empty
+    ? createElement('div', {
+        key: 'h', className: 'pi-sectionHeader pi-sectionHeaderEmpty',
+        title: t(BUCKET_HINT[bucket]),
+      }, [
+        createElement('span', { key: 'c', className: 'pi-chevron', 'aria-hidden': true }),
+        createElement('span', { key: 'l', className: 'pi-sectionLabel' }, t(BUCKET_LABEL[bucket])),
+        countNode,
+      ])
+    : createElement('button', {
+        key: 'h', type: 'button', className: 'pi-sectionHeader', onClick: props.onToggle,
+        'aria-expanded': props.open, 'aria-controls': `pi-rows-${bucket}`,
+        // 查询限定词不再常显（窄侧栏里它最先挤掉标题），留给原生 tooltip。
+        title: t(BUCKET_HINT[bucket]),
+      }, [
+        createElement('span', { key: 'c', className: 'pi-chevron' }, createElement(IconChevronDownOutlineRegular, { size: 14 })),
+        createElement('span', { key: 'l', className: 'pi-sectionLabel' }, t(BUCKET_LABEL[bucket])),
+        countNode,
+      ])
+  return createElement('section', {
+    className: 'pi-section',
+    'data-bucket': bucket,
+    'data-open': props.open ? 'true' : 'false',
+    'data-empty': empty ? 'true' : undefined,
+  }, [
+    header,
+    empty ? null : createElement('div', { key: 'b', className: 'pi-rows', id: `pi-rows-${bucket}` }, body),
   ])
 }
 

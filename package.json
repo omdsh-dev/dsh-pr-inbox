@@ -1,6 +1,6 @@
 {
   "name": "dsh-pr-inbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DSH 插件：侧边栏 PR 面板 —— 自动绑定当前工作区的项目，按「我提的 / 待我审 / 我合并的」三桶原生渲染 GitHub PR，复用本机 gh CLI，只读。",
   "type": "module",
   "license": "MIT",
