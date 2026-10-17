@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "PR 收件箱",
-    "description": "把与你相关的 GitHub PR（我提的 / 待我审 / 最近合并）照进侧边栏，复用本机 gh 登录，只读。"
+    "description": "把与你相关的 GitHub PR（我提的 / 待我审 / 我合并的）照进侧边栏，复用本机 gh 登录，只读。"
   }
 }

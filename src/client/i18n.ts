@@ -25,7 +25,7 @@ const NS = 'dsh-pr-inbox'
 
 const zh: Record<string, string> = {
   tabTitle: 'PR',
-  tabDescription: '本项目 Pull Request：我提的 / 待我审 / 最近合并',
+  tabDescription: '本项目 Pull Request：我提的 / 待我审 / 我合并的',
   searchPlaceholder: '搜索标题 / 编号 / 作者 / 标签…',
   refresh: '刷新',
   reading: '读取中…',
@@ -122,7 +122,7 @@ const zh: Record<string, string> = {
 
 const en: Record<string, string> = {
   tabTitle: 'PR',
-  tabDescription: 'Pull requests of this project: authored by me / needs my review / recently merged',
+  tabDescription: 'Pull requests of this project: authored by me / needs my review / merged by me',
   searchPlaceholder: 'Search title / number / author / label…',
   refresh: 'Refresh',
   reading: 'Loading…',

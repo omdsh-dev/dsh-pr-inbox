@@ -14,7 +14,7 @@ import type { BucketKey, BucketValue, ListValue, PrRow } from '../shared/types'
 
 /** 一页取多少行（桶头的 total 是命中总数，不受它限制）。 */
 const PAGE_SIZE = 30
-/** 「最近合并」按更新时间倒序取多少条（用户定的口径）。 */
+/** 「我合并的」按更新时间倒序取多少条（搜索接口只能按 updated 取一页）。 */
 export const MERGED_LIMIT = 20
 /** 列表缓存 60 s：搜索配额 30 次/分，一次刷新 3 条查询——这个 TTL 下反复切 tab 也安全。 */
 const CACHE_TTL_MS = 60_000
@@ -31,7 +31,7 @@ export interface BucketQuery {
 
 /** 三个桶的查询（纯函数：给定 owner/repo 产出限定词，便于单测锁定语义）。
  *
- * 「最近合并」限定 `author:@me`：这一桶回答的是「我刚做的事落地没有」，
+ * 「我合并的」限定 `author:@me`：这一桶回答的是「我刚做的事落地没有」，
  * 不是「仓库最近合并了什么」。仓库全局的合并流会把这一桶变成别人的时间线。
  */
 export function bucketQueries(repo: string): BucketQuery[] {
