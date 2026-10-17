@@ -25,7 +25,7 @@ export class PrInboxError extends Error {
 /** 把 gh 的 stderr 归成可操作的错误码（客户端按 code 出人话提示）。 */
 export function classifyGhFailure(detail: string): PrInboxError {
   const text = detail.replace(/\s+/g, ' ').trim()
-  if (/gh auth login|not logged in|authentication required|HTTP 401|Bad credentials/i.test(text)) {
+  if (/gh auth login|not logged in|authentication required|HTTP 401|Bad credentials|GH_TOKEN environment variable|GitHub Actions workflow/i.test(text)) {
     return new PrInboxError(text === '' ? 'gh 未登录' : text, 'gh-unauthenticated', 401)
   }
   if (/rate limit|HTTP 403|secondary rate/i.test(text)) {

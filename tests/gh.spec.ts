@@ -8,6 +8,8 @@ describe('classifyGhFailure', () => {
       'gh: not logged in',
       'HTTP 401: Bad credentials',
       'authentication required',
+      // GitHub Actions 里 gh 检测到 GITHUB_ACTIONS 时会换一句提示（不是 gh auth login）。
+      'gh: To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN environment variable.',
     ]) {
       const error = classifyGhFailure(detail)
       expect(error.code, detail).toBe('gh-unauthenticated')

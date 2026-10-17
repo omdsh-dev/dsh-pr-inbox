@@ -57,7 +57,15 @@ describe('gh process edge cases (real spawns, no network)', () => {
     if ((probe as { code?: string }).code === 'gh-missing') return
     const config = tempDir('pr-inbox-gh-config-')
     try {
-      await withEnv({ GH_CONFIG_DIR: config, GH_TOKEN: undefined, GITHUB_TOKEN: undefined }, async () => {
+      await withEnv({
+        GH_CONFIG_DIR: config,
+        GH_TOKEN: undefined,
+        GITHUB_TOKEN: undefined,
+        // Actions 里 gh 会检测 GITHUB_ACTIONS 并换成 "set GH_TOKEN" 的提示；这条用例
+        // 要模拟的是普通机器上的未登录，所以把 Actions 标记也摘掉。
+        GITHUB_ACTIONS: undefined,
+        CI: undefined,
+      }, async () => {
         const error = await runGh(['api', 'user', '-q', '.login']).catch((reason: unknown) => reason)
         expect(error).toMatchObject({ code: 'gh-unauthenticated', status: 401 })
         // gh 的原始 stderr 随版本/环境变化：本机是 "gh auth login" 提示，GitHub Actions
