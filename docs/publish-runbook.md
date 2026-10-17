@@ -6,18 +6,13 @@
 
 ## 0. 状态与待拍板
 
-**已定（2026-10-16）**：**先不发布**。仓库留在本地；将来发布时按 **public** 走。
-发布前在 README 里把"尚未发布"那段（`## 安装` 里的 tarball 前提）改成 git 源即可——
-两条命令都已实测（见 §1）。
+**已定（2026-10-17）**：发布到 **`omdsh-dev/dsh-pr-inbox`（public）**，只走 GitHub
+git 源（`lib/` 入库，使用者免构建）；暂不发 npm、暂不发官方 Discussions。
 
-以下四项是发布当天要拍板的（其余都已就绪）：
-
-- [ ] GitHub 所有者 + 仓库名。**当前假设：`vlln/dsh-pr-inbox`**（本机 gh 登录是 `vlln`，
-      其它插件也在 `vlln/` 下）。若改成组织（如 `omdsh-dev`），要同步改
-      [README](../README.md) 安装节里的 `github:vlln/dsh-pr-inbox`。
-- [x] 公开性：**public**（2026-10-16 定；要让别人能用 git 源装就得公开）
-- [ ] 是否同时发 npm：只走 `github:` 源完全可以（`lib/` 入库，使用者免构建、免 `allowBuilds`）
-- [ ] 是否在官方 Discussions 的 `Show Your Plugins!` 发一条介绍（对外可见的动作，需明确同意）
+- [x] GitHub 所有者 + 仓库名：**`omdsh-dev/dsh-pr-inbox`**（2026-10-17 定）
+- [x] 公开性：**public**
+- [ ] 是否同时发 npm：暂缓（只走 `github:` 源完全可以）
+- [ ] 是否在官方 Discussions 的 `Show Your Plugins!` 发一条介绍（对外可见的动作，需单独明确同意）
 
 npm 名 `dsh-pr-inbox` 已确认未被占用（2026-10-16 查 `registry.npmjs.org` 返回 404）。
 
@@ -37,9 +32,9 @@ node scripts/gates/run.mjs --instance /path/to/some/repo   # 4 个实例门
 ## 2. 建远端并推 `main`
 
 ```bash
-gh repo create vlln/dsh-pr-inbox --public --source . --remote origin --push
+gh repo create omdsh-dev/dsh-pr-inbox --public --source . --remote origin --push
 # 等价手工形态：
-# git remote add origin git@github.com:vlln/dsh-pr-inbox.git && git push -u origin main
+# git remote add origin git@github.com:omdsh-dev/dsh-pr-inbox.git && git push -u origin main
 ```
 
 推上去 CI 自动生效（[.github/workflows/ci.yml](../.github/workflows/ci.yml)）：
@@ -56,7 +51,7 @@ git push origin v0.1.0
 ## 4. 仓库描述与 topics（搜索里能被一眼看懂 + 能被搜到）
 
 ```bash
-gh repo edit vlln/dsh-pr-inbox \
+gh repo edit omdsh-dev/dsh-pr-inbox \
   --description "把与你相关的 GitHub PR（我提的 / 待我审 / 我合并的）照进 DSH 侧边栏，复用本机 gh 登录，只读（DeepSeek Harness 插件）" \
   --add-topic dsh-plugin --add-topic deepseek-harness \
   --add-topic pull-request --add-topic github --add-topic sidebar
@@ -82,9 +77,9 @@ Org/Repo + Workflow filename）后不需要 `NPM_TOKEN`。
 
 1. `src/client/plugins-tabs.ts`：按 id 字母序插入一条
    - `id: 'dsh-pr-inbox'`（= npm 包名）
-   - `url: 'https://github.com/vlln/dsh-pr-inbox'`
+   - `url: 'https://github.com/omdsh-dev/dsh-pr-inbox'`
    - `name: () => t('pluginPrInboxName')` / `description: () => t('pluginPrInboxDesc')`
-   - `install: 'cd ~/.dsh && dsh plugin --profile web add dsh-better-sidebar && dsh plugin --profile web add dsh-pr-inbox'`
+   - `install: 'cd ~/.dsh && dsh plugin --profile web add dsh-better-sidebar && dsh plugin --profile web add github:omdsh-dev/dsh-pr-inbox'`
      （该仓库的 `tests/plugin-list.spec.ts` 要求安装行以 `cd ~/.dsh` 开头）
 2. `src/client/locales.ts`：加 `pluginPrInboxName` / `pluginPrInboxDesc` 的 zh 与 en
 3. `src/client/locales-ja.ts`：同步 ja（该仓库硬规则：新增 zh key 必须同步 ja）

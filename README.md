@@ -41,8 +41,8 @@
 **dsh 0.2.1 线需要 better-sidebar ≥ 0.28.0**：0.26.x 的 `inject` 仍要求 0.2.1 已移除的
 `webRuntime`，页签会永久 pending、界面上没有任何入口。
 
-> **当前状态：尚未发布到公开仓库**（仓库还在本地）。所以先用下面的 tarball 方式装；
-> 发布后 `github:` 源那条命令才可用。
+> **当前状态：已发布到公开仓库 `omdsh-dev/dsh-pr-inbox`**（2026-10-17）。用下面的
+> git 源安装；`lib/` 已随仓库提交，不需要构建授权。
 
 **① 装页签宿主**（两种方式都要）
 
@@ -53,20 +53,21 @@ dsh plugin --profile web add dsh-better-sidebar
 **② 装本插件**
 
 ```bash
-# 尚未发布：本地 tarball（需要 clone 本仓库）
-pnpm install && pnpm pack                       # 产出 dsh-pr-inbox-0.1.0.tgz
-dsh plugin --profile web add ./dsh-pr-inbox-0.1.0.tgz
+dsh plugin --profile web add "github:omdsh-dev/dsh-pr-inbox"
+# 钉版本：用 ...#v0.1.0
 ```
 
+本地开发/自测也可以走 tarball（需要 clone 仓库）：
+
 ```bash
-# 发布后（本仓库公开时）：git 源一条命令，钉版本加 #v0.1.0
-dsh plugin --profile web add "github:vlln/dsh-pr-inbox"
+pnpm install && pnpm pack                       # 产出 dsh-pr-inbox-0.1.0.tgz
+dsh plugin --profile web add ./dsh-pr-inbox-0.1.0.tgz
 ```
 
 装完刷新页面（或按 DSH 提示重启 web）即可在**右侧栏**看到 `PR` 页签：
 展开右栏 → 从页签列表里选 `PR`。
 
-> `lib/` 构建产物随仓库提交，所以上面两条通道都**不需要**任何构建授权
+> `lib/` 构建产物随仓库提交，所以 git 源安装**不需要**任何构建授权
 > （不会让你放行 `allowBuilds`，也不会在你的机器上跑构建脚本）。
 
 ## 用起来是什么样
