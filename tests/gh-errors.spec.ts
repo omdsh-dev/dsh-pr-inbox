@@ -60,8 +60,10 @@ describe('gh process edge cases (real spawns, no network)', () => {
       await withEnv({ GH_CONFIG_DIR: config, GH_TOKEN: undefined, GITHUB_TOKEN: undefined }, async () => {
         const error = await runGh(['api', 'user', '-q', '.login']).catch((reason: unknown) => reason)
         expect(error).toMatchObject({ code: 'gh-unauthenticated', status: 401 })
-        // 提示语必须来自 gh 自己，用户照着做就能修好。
-        expect((error as Error).message).toMatch(/gh auth login/)
+        // gh 的原始 stderr 随版本/环境变化：本机是 "gh auth login" 提示，GitHub Actions
+        // 上可能是 "HTTP 401: Bad credentials"。用户可见的「怎么办」现在由客户端按 code
+        // 翻译（src/client/errors.ts），这里只要求分类正确且原始信息非空。
+        expect((error as Error).message.trim()).not.toBe('')
       })
     } finally {
       rmSync(config, { recursive: true, force: true })
