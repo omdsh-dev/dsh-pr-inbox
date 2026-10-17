@@ -72,6 +72,8 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 ## 4. 验证证据（这些数字是"当时实测"，不是承诺）
 
 门禁入口 `node scripts/gates/run.mjs`（`--list` 看清单，`--instance <仓库路径>` 加实例门）。
+**2026-10-17 在 `0.2.1-rc.1` + better-sidebar `0.28.0` 上 `--all`：13 个门全通**（静态 9 +
+git-source / mounted / negative-control / standalone；mounted 另跑了一遍 `THEME=dark`）。
 
 ### 静态门（默认跑，不需要 gh / 浏览器）
 
@@ -89,10 +91,10 @@ src/client/{bits,format,pr-image,api,styles,i18n}.ts(x)
 
 | 门 | 证明什么 | 最近一次实测 |
 |---|---|---|
-| `git-source` | **真实发布通道**（`git+file://` 等价于 README 给用户的 `github:` 源）装得上、boot 干净、路由真应答 | 全绿（2026-10-16，0.2.0-rc.2）：无 ERESOLVE、日志 0 失败行、三 op + 围栏通过；0.2.1 组合待重跑 |
+| `git-source` | **真实发布通道**（`git+file://` 等价于 README 给用户的 `github:` 源）装得上、boot 干净、路由真应答 | 全绿（2026-10-17，`0.2.1-rc.1` + 0.28.0）：clone 已提交 HEAD、无 ERESOLVE、日志 0 失败行、三 op + 围栏通过 |
 | `mounted` | 隔离 profile 里真装真跑：右栏条目出现 → 面板渲染出绑定的项目 → 行几何/分层/贴顶/头像/**正文图片**/英文 chrome 都量成数字。`THEME=dark` 再跑一遍（深色截图 + 主题自证） | 全绿（2026-10-17，`0.2.1-rc.1` + better-sidebar `0.28.0`）：合并桶 2 行、行高 28/50、头带 47、行首留白 12、头像 x=717 两档一致、行线 1px/`rgba(0,0,0,0.1)`、贴顶 y=滚动口上沿、头像全解码无悬挂、**#969 正文 2 个 `<img>` 全部解码且无标签字面残留**、英文 chrome 无中文时间/提示 |
-| `negative-control` | 负控：坏副本必须**响亮**报错，否则上面那条「日志干净」不算证据 | 全绿（2026-10-16，0.2.0-rc.2）：A 基线 `entry:true`；B 坏 host → `did not activate` + `pending (waiting for service: …)` + 路由 405；C 坏 client → 条目不出现 + 控制台 `web boot: 1 entry did not activate` |
-| `standalone` | better-sidebar 缺席时：host 半照常应答、client 半安全未激活 | 全绿（2026-10-16，0.2.0-rc.2） |
+| `negative-control` | 负控：坏副本必须**响亮**报错，否则上面那条「日志干净」不算证据 | 全绿（2026-10-17，0.2.1 + 0.28.0）：A 基线 `entry:true`；B 坏 host → `pending (waiting for service: noSuchService)` + 路由 405；C 坏 client → `web boot: 1 entry did not activate` + `pending (waiting for service: noSuchClientService)` |
+| `standalone` | better-sidebar 缺席时：host 半照常应答、client 半安全未激活 | 全绿（2026-10-17，0.2.1）：路由 200、绑定可用、页面无 better-sidebar 宿主节点、零 pageerror |
 
 ### 单元测试覆盖的"只有纯函数才钉得住"的东西
 

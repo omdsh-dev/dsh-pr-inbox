@@ -126,7 +126,7 @@ dsh plugin --profile web add "github:vlln/dsh-pr-inbox"
 
 | dsh 版本 | 状态 |
 |---|---|
-| `0.2.1-rc.1` + better-sidebar `0.28.0` | ✅ 已验证（2026-10-17）：隔离实例 mounted 门（装、跑、点开详情、英文 chrome、正文图片、行几何、图标）。git 源 / 负控 / standalone 仍待在该组合重跑 |
+| `0.2.1-rc.1` + better-sidebar `0.28.0` | ✅ 已验证（2026-10-17）：13 个门全绿（静态 9 + git 源 / mounted 浅色+深色 / negative-control / standalone） |
 | `0.2.0-rc.2` + better-sidebar `0.26.x` | ✅ 已验证（2026-10-16）：真实实例里装、跑、点开详情，含 git 源安装与负控 |
 | 其它版本 | ⚠️ 未验证。升级 dsh 后若**右栏没有 `PR` 页签**或**面板一直空白**，多半是宿主服务名/槽名或 client 契约变了；0.2.1 线先确认 better-sidebar ≥ `0.28.0` |
 
